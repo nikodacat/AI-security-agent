@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HomeSecAI Security Report — {{ generated_at }}</title>
+  <style>
+    :root {
+      --critical: #dc2626; --high: #ea580c; --medium: #ca8a04;
+      --low: #16a34a; --info: #2563eb;
+      --bg: #0f172a; --surface: #1e293b; --border: #334155;
+      --text: #e2e8f0; --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 2rem; }
+    h1 { font-size: 2rem; font-weight: 800; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.25rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: #7dd3fc; }
+    h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--muted); }
+    .header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; }
+    .grade-circle {
+      width: 90px; height: 90px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.5rem; font-weight: 900; border: 4px solid;
+      flex-shrink: 0;
+    }
+    .grade-A { color: #22c55e; border-color: #22c55e; }
+    .grade-B { color: #84cc16; border-color: #84cc16; }
+    .grade-C { color: #eab308; border-color: #eab308; }
+    .grade-D { color: #f97316; border-color: #f97316; }
+    .grade-F { color: #ef4444; border-color: #ef4444; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+    .sev-critical { background: var(--critical); color: #fff; }
+    .sev-high     { background: var(--high);     color: #fff; }
+    .sev-medium   { background: var(--medium);   color: #fff; }
+    .sev-low      { background: var(--low);      color: #fff; }
+    .sev-info     { background: var(--info);     color: #fff; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th { background: #0f172a; padding: 0.625rem 0.75rem; text-align: left; color: var(--muted); font-weight: 600; }
+    td { padding: 0.625rem 0.75rem; border-top: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: rgba(255,255,255,0.03); }
+    .scanner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+    .scanner-card { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+    .scanner-score { font-size: 1.75rem; font-weight: 800; }
+    .score-good  { color: #22c55e; }
+    .score-ok    { color: #eab308; }
+    .score-bad   { color: #ef4444; }
+    .sev-counts { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
+    .sev-pill { padding: 4px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+    ul { padding-left: 1.25rem; }
+    li { margin-bottom: 0.35rem; }
+    .muted { color: var(--muted); font-size: 0.875rem; }
+    .generated { color: var(--muted); font-size: 0.8rem; margin-top: 0.25rem; }
+    @media print { body { background: white; color: black; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="grade-circle grade-{{ grade }}">{{ grade }}</div>
+    <div>
+      <h1>Security Report</h1>
+      <div style="font-size:1.1rem; color: #7dd3fc;">Score: {{ overall_score }}/100</div>
+      <div class="generated">Generated: {{ generated_at }}</div>
+    </div>
+  </div>
+
+  <!-- Executive Summary -->
+  <div class="card">
+    <h2>Executive Summary</h2>
+    <p style="margin-bottom:1rem; line-height:1.6;">{{ executive.headline }}</p>
+    {% for para in executive.summary_paragraphs %}
+    <p style="margin-bottom:0.75rem; color: #cbd5e1; line-height:1.6;">{{ para }}</p>
+    {% endfor %}
+
+    <div class="sev-counts">
+      {% if severity_counts.critical %}<div class="sev-pill sev-critical">{{ severity_counts.critical }} Critical</div>{% endif %}
+      {% if severity_counts.high %}<div class="sev-pill sev-high">{{ severity_counts.high }} High</div>{% endif %}
+      {% if severity_counts.medium %}<div class="sev-pill sev-medium">{{ severity_counts.medium }} Medium</div>{% endif %}
+      {% if severity_counts.low %}<div class="sev-pill sev-low">{{ severity_counts.low }} Low</div>{% endif %}
+      {% if severity_counts.info %}<div class="sev-pill sev-info">{{ severity_counts.info }} Info</div>{% endif %}
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h3>Top Risks</h3>
+        <ul>{% for r in executive.top_risks %}<li>{{ r }}</li>{% endfor %}</ul>
+      </div>
+      <div>
+        <h3>Quick Wins</h3>
+        <ul>{% for q in executive.quick_wins %}<li>{{ q }}</li>{% endfor %}</ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Priority Actions -->
+  <div class="card">
+    <h2>Priority Actions</h2>
+    <table>
+      <thead><tr><th>Action</th><th>Effort</th><th>Impact</th></tr></thead>
+      <tbody>
+        {% for a in executive.priority_actions %}
+        <tr>
+          <td>{{ a.action }}</td>
+          <td><span class="badge sev-{{ 'low' if a.effort == 'low' else ('medium' if a.effort == 'medium' else 'high') }}">{{ a.effort }}</span></td>
+          <td><span class="badge sev-{{ 'high' if a.impact == 'high' else ('medium' if a.impact == 'medium' else 'low') }}">{{ a.impact }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Scanner Scores -->
+  <div class="card">
+    <h2>Module Scores</h2>
+    <div class="scanner-grid">
+      {% for s in scanner_summaries %}
+      <div class="scanner-card">
+        <div class="scanner-score {{ 'score-good' if s.score >= 75 else ('score-ok' if s.score >= 50 else 'score-bad') }}">{{ s.score }}</div>
+        <div style="font-weight:600; text-transform: capitalize;">{{ s.name }}</div>
+        <div class="muted" style="font-size:0.75rem; margin-top:0.25rem;">{{ s.finding_count }} finding(s)</div>
+        <div class="muted" style="font-size:0.75rem;">{{ "%.1f"|format(s.duration) }}s</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- All Findings -->
+  <div class="card">
+    <h2>All Findings</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Sev</th><th>Module</th><th>Title</th><th>Description</th><th>Recommendation</th></tr>
+      </thead>
+      <tbody>
+        {% for f in all_findings %}
+        <tr>
+          <td style="white-space:nowrap; font-family:monospace; font-size:0.75rem;">{{ f.id }}</td>
+          <td><span class="badge sev-{{ f.severity }}">{{ f.severity }}</span></td>
+          <td style="text-transform:capitalize; white-space:nowrap;">{{ f.scanner }}</td>
+          <td style="font-weight:600;">{{ f.title }}</td>
+          <td class="muted">{{ f.description }}</td>
+          <td style="color:#86efac;">{{ f.recommendation }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="text-align:center; margin-top:2rem; color: var(--muted); font-size:0.8rem;">
+    HomeSecAI — Powered by Claude AI · {{ generated_at }}
+  </div>
+</body>
+</html>

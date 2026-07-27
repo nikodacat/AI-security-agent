@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HomeSecAI — Security Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">🛡️</span>
+        <span class="logo-text">HomeSecAI</span>
+      </div>
+      <div class="header-sub">Enterprise Security for Your Home</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Scan Control -->
+    <section class="card scan-control" id="scan-control">
+      <h2>Security Scan</h2>
+      <p class="muted">Runs all 8 security modules and generates an AI-powered report.</p>
+      <button id="scan-btn" class="btn-primary" onclick="startScan()">Run Full Scan</button>
+      <div id="scan-status" class="scan-status hidden"></div>
+    </section>
+
+    <!-- Progress -->
+    <section class="card hidden" id="progress-section">
+      <h2>Scan Progress</h2>
+      <div id="progress-grid" class="progress-grid"></div>
+    </section>
+
+    <!-- Executive Summary -->
+    <section class="card hidden" id="summary-section">
+      <div class="grade-row">
+        <div class="grade-badge" id="grade-badge">?</div>
+        <div>
+          <div class="score-text" id="score-text">—/100</div>
+          <div class="headline" id="headline">Running scan...</div>
+        </div>
+        <div class="report-link-wrap">
+          <a id="report-link" href="/api/report/view" target="_blank" class="btn-secondary hidden">View Full Report</a>
+        </div>
+      </div>
+
+      <div class="severity-bar-wrap" id="severity-counts"></div>
+
+      <div class="two-col">
+        <div>
+          <h3>Top Risks</h3>
+          <ul id="top-risks" class="risk-list"></ul>
+        </div>
+        <div>
+          <h3>Quick Wins</h3>
+          <ul id="quick-wins" class="win-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Per-Scanner Scores -->
+    <section class="card hidden" id="scanners-section">
+      <h2>Scanner Results</h2>
+      <div id="scanner-cards" class="scanner-grid"></div>
+    </section>
+
+    <!-- Findings Table -->
+    <section class="card hidden" id="findings-section">
+      <h2>All Findings</h2>
+      <div class="filter-row">
+        <label>Filter:
+          <select id="severity-filter" onchange="filterFindings()">
+            <option value="">All</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="info">Info</option>
+          </select>
+        </label>
+      </div>
+      <table id="findings-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Severity</th><th>Scanner</th><th>Title</th><th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody id="findings-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# claude_engine.py shells out to the local `claude` CLI (Claude Code subscription).
+# No ANTHROPIC_API_KEY needed — just run `claude` once to authenticate.
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+jinja2>=3.1.4
+python-multipart>=0.0.12
+httpx>=0.27.0
+pyyaml>=6.0.2
+rich>=13.9.0
+# weasyprint is optional — requires GTK/Pango native libs.
+# If not installed, PDF export is skipped; use browser Print→Save as PDF instead.
+# weasyprint>=62.3
+psutil>=6.1.0
+
+# --- software scanner: KEV engine ---
+# Used when scanners.software.engine == "kev" (default). The scanner imports
+# `cve_scanner` from the sibling repo at ../cve-scanner/ via sys.path, so the
+# package itself does not need to be pip-installed — but its runtime deps do:
+rapidfuzz>=3.9
+# (httpx is already required above and is shared with cve_scanner.)
+
+# To run the legacy keyword engine instead, set scanners.software.engine: keyword
+# in config.yaml; rapidfuzz then becomes unused but harmless.

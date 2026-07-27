@@ -1,0 +1,65 @@
+claude:
+  model: claude-sonnet-4-6
+  max_tokens: 8096
+
+nvd:
+  api_url: https://services.nvd.nist.gov/rest/json/cves/2.0
+  # api_key: ""   # optional, increases rate limit
+
+scanners:
+  network:
+    enabled: true
+    nmap_path: nmap   # must be in PATH or full path
+    port_range: "1-65535"
+    scan_timeout: 120
+  system:
+    enabled: true
+  software:
+    enabled: true
+    cve_lookup: true
+    # Engine for CVE matching:
+    #   kev     - (default) uses the sibling cve-scanner package: KEV catalog
+    #             match + optional NVD CPE version-range check. Low FP rate,
+    #             ransomware-linked CVEs are flagged. Needs cve-scanner installed
+    #             at ../cve-scanner/ alongside this project.
+    #   keyword - legacy NVD keyword search. Higher FP rate, no version check,
+    #             no KEV awareness. Kept as a fallback when cve-scanner is not
+    #             available.
+    engine: kev
+    # When engine=kev, fetch each finding's NVD entry and decide whether the
+    # installed version is in the affected range. First run is rate-limited
+    # (~6.5s per CVE without NVD_API_KEY); subsequent runs hit a local cache.
+    check_versions: true
+    # When engine=kev, include findings whose version is outside every affected
+    # range. Off by default to keep the report focused on actionable items.
+    show_patched: false
+    # Only used when engine=keyword: how many NVD hits to fetch per app.
+    max_cve_per_app: 5
+  users:
+    enabled: true
+  processes:
+    enabled: true
+  filesystem:
+    enabled: true
+    # Paths to walk for sensitive-file patterns. Defaults are platform-aware:
+    #   Windows: C:\Users + C:\Windows\System32\config
+    #   Linux  : ~ + /etc/ssh + /root/.ssh + /var/backups
+    # If you uncomment sensitive_paths below, it OVERRIDES the defaults for
+    # BOTH platforms. Leave commented to let each platform pick sensibly.
+    # sensitive_paths:
+    #   - C:\Users
+    #   - C:\Windows\System32\config
+    #   - /home
+    #   - /etc/ssh
+    #   - /root/.ssh
+    max_depth: 3
+  startup:
+    enabled: true
+  hardware:
+    enabled: true
+
+report:
+  output_dir: reports
+  formats:
+    - html
+    # - pdf  # requires GTK/Pango libs; use browser Print→Save as PDF instead

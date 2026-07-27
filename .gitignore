@@ -1,0 +1,179 @@
+# ===========================================================
+# Top-level .gitignore for nikodacat/AI-security-agant
+# ===========================================================
+# What this repo tracks:
+#   home-security-ai/   (this project)
+#   cve-scanner/        (this project)
+#   紀錄/                (thesis notes, kept as-is on the remote)
+#
+# What this repo intentionally does NOT track (see SETUP-FORKS.md
+# for how to clone them locally if needed):
+#   PentestGPT/
+#   auto-pen-bench/
+#   VulnBot/
+#   genai-pentest-paper/
+
+# -----------------------------------------------------------
+# Secrets - never commit these
+# -----------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.sample
+*.env
+secrets/
+secrets.*
+credentials
+credentials.*
+*.credentials
+*.pem
+*.key
+*.pfx
+*.p12
+*.pkcs12
+*.crt
+*.cer
+*.kdbx
+*.ovpn
+*.wallet
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*_rsa
+*_ed25519
+known_hosts
+authorized_keys
+.netrc
+.npmrc
+*.token
+api_key.txt
+api_keys.*
+client_secret*.json
+
+# -----------------------------------------------------------
+# Python: virtual environments and bytecode
+# -----------------------------------------------------------
+# Patterns are listed BOTH with and without trailing slash on purpose.
+# `.venv/` only matches a real directory; `.venv` also matches symlinks /
+# reparse points / broken junctions that some venv tooling creates on
+# Windows (especially when the venv was originally made under WSL).
+.venv
+.venv/
+.venv-*
+.venv-*/
+venv
+venv/
+env/
+ENV/
+**/.venv
+**/.venv/
+**/.venv-*
+**/.venv-*/
+**/venv
+**/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.pip-cache/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# -----------------------------------------------------------
+# Project: real scan output (contains data about YOUR machines)
+# -----------------------------------------------------------
+# Match "reports/" at ANY depth including the top level. `**/reports/`
+# alone doesn't reliably match at the root in all git versions, so we
+# also list the bare `reports/` to guarantee coverage.
+reports/
+**/reports/
+home-security-ai/reports/
+cve-scanner/reports/
+**/reports/*.json
+**/reports/*.html
+**/reports/*.md
+**/reports/*.pdf
+
+# -----------------------------------------------------------
+# Project: API response caches (regenerated on demand)
+# -----------------------------------------------------------
+cve-scanner/cache/
+**/.cache/
+**/cache/*.json
+**/cache/kev_*.json
+**/cache/CVE-*.json
+
+# -----------------------------------------------------------
+# External / fork projects: NOT tracked here.
+# These live on disk for local research but stay out of the repo.
+# See SETUP-FORKS.md for how to re-clone them on a fresh checkout.
+# -----------------------------------------------------------
+PentestGPT/
+auto-pen-bench/
+VulnBot/
+genai-pentest-paper/
+
+# Heavy media inside any sub-dir (defensive — forks are excluded anyway)
+**/*.mov
+**/*.mp4
+**/*.avi
+**/*.mkv
+**/*.gif
+**/install.gif
+
+# -----------------------------------------------------------
+# Local tooling hooks (not part of the thesis project)
+# -----------------------------------------------------------
+.github/java-upgrade/
+
+# -----------------------------------------------------------
+# Git internals that landed here as normal files (from moved/renamed
+# .git directories during setup) — should never be tracked.
+# -----------------------------------------------------------
+.git.broken/
+.git.old/
+.git.*/
+
+# -----------------------------------------------------------
+# OS / IDE / editor junk
+# -----------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+.directory
+
+# -----------------------------------------------------------
+# Logs
+# -----------------------------------------------------------
+*.log
+logs/
+**/logs/
+
+# -----------------------------------------------------------
+# Local config overrides (user may keep machine-specific tweaks)
+# -----------------------------------------------------------
+config.local.yaml
+config.local.yml
+*.local
+local_settings.py
