@@ -1,6 +1,6 @@
-# home-security-ai test lab
+# host-scanner test lab
 
-End-to-end test setup for cve-scanner + home-security-ai. Runs in a disposable
+End-to-end test setup for cve-matcher + host-scanner. Runs in a disposable
 Windows VM so we can install software with known active CVEs without
 risking the host.
 
@@ -40,7 +40,7 @@ winget install --id Python.Python.3.12 --source winget
 winget install --id Git.Git --source winget
 
 git clone https://github.com/<your-fork>/project.git C:\project
-cd C:\project\home-security-ai
+cd C:\project\host-scanner
 .\setup.ps1
 ```
 
@@ -53,7 +53,7 @@ to sign in with your subscription. The scanner picks it up via PATH.
 ## Step 3: install deliberately-vulnerable apps
 
 ```powershell
-cd C:\project\home-security-ai\test
+cd C:\project\host-scanner\test
 $env:HOMESEC_TEST_VM_CONFIRM = "YES_I_AM_IN_A_DISPOSABLE_VM"
 .\install-vulnerable-apps.ps1
 ```
@@ -73,11 +73,11 @@ What gets installed:
 
 Snapshot the VM again as `vulnerable-baseline` after install.
 
-## Step 4: run cve-scanner standalone
+## Step 4: run cve-matcher standalone
 
 ```powershell
-cd C:\project\cve-scanner
-python -m cve_scanner scan --check-versions --no-explain
+cd C:\project\cve-matcher
+python -m cve_matcher scan --check-versions --no-explain
 ```
 
 You should see (versions / counts will vary slightly with KEV updates):
@@ -92,10 +92,10 @@ You should see (versions / counts will vary slightly with KEV updates):
 The four vulnerable hits are the four apps we installed. The patched + unknown
 counts come from whatever else the Windows VM ships with (Edge, etc.).
 
-## Step 5: run the full home-security-ai pipeline
+## Step 5: run the full host-scanner pipeline
 
 ```powershell
-cd C:\project\home-security-ai
+cd C:\project\host-scanner
 .\run_cli.ps1        # CLI scan -> HTML report
 # or
 .\run_web.ps1        # FastAPI dashboard at http://localhost:8000
@@ -111,7 +111,7 @@ Easiest: shut down the VM and revert to the `clean-baseline` snapshot.
 If you want to keep the VM and just remove the four test apps:
 
 ```powershell
-cd C:\project\home-security-ai\test
+cd C:\project\host-scanner\test
 .\uninstall-vulnerable-apps.ps1
 ```
 
@@ -120,7 +120,7 @@ The snapshot revert is more reliable.
 
 ## Expected `kev_findings` from the test lab
 
-When everything is set up, `home-security-ai` should produce a software-scanner
+When everything is set up, `host-scanner` should produce a software-scanner
 section containing at minimum these four findings:
 
 | Verdict | CVE | Package | Severity (expected) |
@@ -142,7 +142,7 @@ then revert to snapshot before next test.
 **KEV download fails inside the VM**
 Check VM has outbound HTTPS to `www.cisa.gov`. Some corporate proxies block
 the feed. You can also pre-download `kev.json` on the host and copy it to
-`C:\project\cve-scanner\cache\kev.json`.
+`C:\project\cve-matcher\cache\kev.json`.
 
 **NVD lookups are very slow**
 Without an NVD_API_KEY each CVE lookup sleeps 6.5 s to respect the
@@ -154,4 +154,4 @@ unauthenticated rate limit. Apply for a free key at
 
 To add another vulnerable target, append to the `$apps` array in
 `install-vulnerable-apps.ps1`. Pick versions whose CVE IDs appear in the
-current `cve-scanner\cache\kev.json` to keep the KEV engine path exercised.
+current `cve-matcher\cache\kev.json` to keep the KEV engine path exercised.

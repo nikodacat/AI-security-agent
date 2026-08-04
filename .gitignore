@@ -2,8 +2,8 @@
 # Top-level .gitignore for nikodacat/AI-security-agant
 # ===========================================================
 # What this repo tracks:
-#   home-security-ai/   (this project)
-#   cve-scanner/        (this project)
+#   host-scanner/   (this project)
+#   cve-matcher/        (this project)
 #   紀錄/                (thesis notes, kept as-is on the remote)
 #
 # What this repo intentionally does NOT track (see SETUP-FORKS.md
@@ -101,8 +101,8 @@ htmlcov/
 # also list the bare `reports/` to guarantee coverage.
 reports/
 **/reports/
-home-security-ai/reports/
-cve-scanner/reports/
+host-scanner/reports/
+cve-matcher/reports/
 **/reports/*.json
 **/reports/*.html
 **/reports/*.md
@@ -111,7 +111,7 @@ cve-scanner/reports/
 # -----------------------------------------------------------
 # Project: API response caches (regenerated on demand)
 # -----------------------------------------------------------
-cve-scanner/cache/
+cve-matcher/cache/
 **/.cache/
 **/cache/*.json
 **/cache/kev_*.json

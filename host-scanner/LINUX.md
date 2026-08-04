@@ -8,7 +8,7 @@ renderer work without changes.
 ## Prerequisites
 
 - Python 3.10+ (`python3 --version`)
-- The `cve-scanner` sibling project at `../cve-scanner/` (already in place
+- The `cve-matcher` sibling project at `../cve-matcher/` (already in place
   if you cloned the repo as documented).
 - Claude CLI (Claude Code) on `PATH` or pointed to by `$CLAUDE_CLI_PATH`.
 - Optional but recommended on a server:
@@ -25,7 +25,7 @@ corresponding tool is missing — they will not error out.
 ## One-time setup
 
 ```bash
-cd home-security-ai
+cd host-scanner
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -106,14 +106,14 @@ Claude prompt:
   BIOS info return `Supported: false` / empty when the VM doesn't
   emulate them. That is correct behaviour, not a bug.
 
-## Running just the cve-scanner side (no AI)
+## Running just the cve-matcher side (no AI)
 
 If you only want the KEV-driven CVE report and not the full AI workflow,
-the sibling `cve-scanner` package runs standalone:
+the sibling `cve-matcher` package runs standalone:
 
 ```bash
-cd ../cve-scanner
-python -m cve_scanner scan --check-versions
+cd ../cve-matcher
+python -m cve_matcher scan --check-versions
 ```
 
-That writes a markdown report into `cve-scanner/reports/`.
+That writes a markdown report into `cve-matcher/reports/`.

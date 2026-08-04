@@ -18,12 +18,12 @@ scanners:
     enabled: true
     cve_lookup: true
     # Engine for CVE matching:
-    #   kev     - (default) uses the sibling cve-scanner package: KEV catalog
+    #   kev     - (default) uses the sibling cve-matcher package: KEV catalog
     #             match + optional NVD CPE version-range check. Low FP rate,
-    #             ransomware-linked CVEs are flagged. Needs cve-scanner installed
-    #             at ../cve-scanner/ alongside this project.
+    #             ransomware-linked CVEs are flagged. Needs cve-matcher installed
+    #             at ../cve-matcher/ alongside this project.
     #   keyword - legacy NVD keyword search. Higher FP rate, no version check,
-    #             no KEV awareness. Kept as a fallback when cve-scanner is not
+    #             no KEV awareness. Kept as a fallback when cve-matcher is not
     #             available.
     engine: kev
     # When engine=kev, fetch each finding's NVD entry and decide whether the

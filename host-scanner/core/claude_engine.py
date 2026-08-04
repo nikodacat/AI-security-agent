@@ -193,7 +193,7 @@ def analyze_all(scan_results: dict, system_info: dict, cfg: dict) -> tuple[dict,
     """Run per-scanner analysis AND executive summary in a single CLI call.
 
     Returns (analyses, executive). When a scanner output contains a
-    ``kev_findings`` array (produced by the cve-scanner-backed KEV engine),
+    ``kev_findings`` array (produced by the cve-matcher-backed KEV engine),
     the prompt tells the model to treat that as authoritative and ignore
     the legacy ``cve_matches`` view for the same scanner.
     """

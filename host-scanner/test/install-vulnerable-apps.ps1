@@ -2,14 +2,14 @@
 <#
 .SYNOPSIS
   Installs deliberately-outdated versions of common consumer software so the
-  cve-scanner KEV engine has real findings to flag. RUN INSIDE A DISPOSABLE
+  cve-matcher KEV engine has real findings to flag. RUN INSIDE A DISPOSABLE
   WINDOWS VM ONLY.
 
 .DESCRIPTION
   Pulls installer binaries straight from each vendor's archive (no Chocolatey
   dependency — Chocolatey is unreliable for pinning very old versions).
   Every entry below maps to a known KEV CVE so you get predictable results
-  when validating home-security-ai + cve-scanner end-to-end.
+  when validating host-scanner + cve-matcher end-to-end.
 
   Target apps (all 64-bit):
     7-Zip 22.01              CVE-2025-0411   (Mark-of-the-Web bypass)
@@ -22,8 +22,8 @@
   - Disables Notepad++ auto-update post-install so 8.6.4 doesn't replace itself.
   - Firefox's installer will auto-update on first launch unless you also set
     `app.update.enabled=false` in about:config; that's separate.
-  - Run scripts\collect-windows.ps1 (in cve-scanner) AFTER install to grab the
-    inventory snapshot, then feed it to cve-scanner via --inventory.
+  - Run scripts\collect-windows.ps1 (in cve-matcher) AFTER install to grab the
+    inventory snapshot, then feed it to cve-matcher via --inventory.
 
 .WARNING
   These versions have *known, actively-exploited vulnerabilities*. DO NOT run
@@ -143,9 +143,9 @@ foreach ($p in $nppPaths) {
 }
 
 Write-Host ''
-Write-Host 'Done. To verify, run cve-scanner against the live inventory:' -ForegroundColor Cyan
-Write-Host '  cd C:\Users\<you>\project\cve-scanner' -ForegroundColor White
-Write-Host '  python -m cve_scanner scan --check-versions --no-explain' -ForegroundColor White
+Write-Host 'Done. To verify, run cve-matcher against the live inventory:' -ForegroundColor Cyan
+Write-Host '  cd C:\Users\<you>\project\cve-matcher' -ForegroundColor White
+Write-Host '  python -m cve_matcher scan --check-versions --no-explain' -ForegroundColor White
 Write-Host ''
 Write-Host 'Expected findings (verdict=vulnerable):' -ForegroundColor Cyan
 foreach ($app in $apps) {

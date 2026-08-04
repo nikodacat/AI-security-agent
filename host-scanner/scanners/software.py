@@ -4,7 +4,7 @@ Two engines are available (switch via config.yaml under
 ``scanners.software.engine``):
 
 - ``"kev"`` (default, recommended):
-    Reuses the sibling ``cve-scanner`` package. KEV-only matching with a
+    Reuses the sibling ``cve-matcher`` package. KEV-only matching with a
     strict alias table + optional NVD CPE version-range checking. Each
     finding is classified as ``vulnerable`` / ``patched`` / ``unknown``,
     ransomware-linked entries are flagged separately, and the overall noise
@@ -14,7 +14,7 @@ Two engines are available (switch via config.yaml under
     The original NVD-keyword-search behaviour: feed each installed-app
     display name into the NVD search endpoint and take the top N hits.
     High false-positive rate (no version comparison, no CPE matching) but
-    requires no extra dependency on the cve-scanner package.
+    requires no extra dependency on the cve-matcher package.
 
 Both engines emit the legacy ``installed_apps`` + ``cve_matches`` shape so
 the downstream Claude prompt in ``core.claude_engine`` keeps working
@@ -44,13 +44,13 @@ import httpx
 from .base import BaseScanner, IS_LINUX, IS_WINDOWS
 
 
-# Path to the sibling cve-scanner project so its ``cve_scanner`` package is
-# importable without packaging it. ``home-security-ai/`` and ``cve-scanner/``
+# Path to the sibling cve-matcher project so its ``cve_matcher`` package is
+# importable without packaging it. ``host-scanner/`` and ``cve-matcher/``
 # are expected to live next to each other under ``project/``.
 _HSAI_ROOT = Path(__file__).resolve().parent.parent
-_CVE_SCANNER_ROOT = _HSAI_ROOT.parent / "cve-scanner"
-if _CVE_SCANNER_ROOT.exists() and str(_CVE_SCANNER_ROOT) not in sys.path:
-    sys.path.insert(0, str(_CVE_SCANNER_ROOT))
+_CVE_MATCHER_ROOT = _HSAI_ROOT.parent / "cve-matcher"
+if _CVE_MATCHER_ROOT.exists() and str(_CVE_MATCHER_ROOT) not in sys.path:
+    sys.path.insert(0, str(_CVE_MATCHER_ROOT))
 
 
 class SoftwareScanner(BaseScanner):
@@ -221,25 +221,25 @@ $apps | ConvertTo-Json -Depth 2
         return results
 
     # ---------------------------------------------------------------
-    # KEV engine: cve-scanner / KEV + NVD CPE version check.
+    # KEV engine: cve-matcher / KEV + NVD CPE version check.
     # ---------------------------------------------------------------
 
     def _run_kev_engine(self, apps: list[dict[str, Any]]) -> dict:
         try:
-            from cve_scanner import kev, matcher
-            from cve_scanner.inventory import Inventory, Package
+            from cve_matcher import kev, matcher
+            from cve_matcher.inventory import Inventory, Package
         except ImportError as error:
             return {
                 "status": "completed",
                 "engine": "kev",
                 "engine_warning": (
-                    f"cve_scanner package not importable ({error}); fell back to keyword engine. "
-                    f"Expected at {_CVE_SCANNER_ROOT}."
+                    f"cve_matcher package not importable ({error}); fell back to keyword engine. "
+                    f"Expected at {_CVE_MATCHER_ROOT}."
                 ),
                 **self._run_keyword_engine(apps),
             }
 
-        # 1. Convert raw apps -> cve_scanner Inventory.
+        # 1. Convert raw apps -> cve_matcher Inventory.
         packages: list[Package] = []
         for app in apps:
             name = (app.get("DisplayName") or "").strip()
