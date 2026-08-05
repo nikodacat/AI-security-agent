@@ -1,0 +1,5 @@
+# exposure-analyzer runtime dependencies.
+# Kept minimal on purpose — this module leans on cve-matcher + host-scanner
+# for data collection and on claude-agent-sdk for LLM interaction.
+
+claude-agent-sdk>=0.1.0

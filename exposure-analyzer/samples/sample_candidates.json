@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "source": "cve-matcher (mocked for exposure-analyzer offline testing)",
+  "kev_findings": [
+    {
+      "cve_id": "CVE-2023-38408",
+      "kev_name": "OpenSSH PKCS#11 Vulnerability",
+      "kev_vendor": "OpenSSH",
+      "kev_product": "OpenSSH",
+      "kev_description": "OpenSSH between 5.5 and 9.3p1 contains a PKCS#11 vulnerability allowing remote code execution via a crafted forwarded ssh-agent connection.",
+      "kev_required_action": "Update to OpenSSH 9.3p2 or later.",
+      "kev_date_added": "2023-07-19",
+      "kev_due_date": "2023-08-09",
+      "ransomware_linked": true,
+      "cwes": ["CWE-428"],
+      "package_name": "openssh-server",
+      "package_version": "8.5p1",
+      "package_vendor": "OpenBSD",
+      "match_reason": "vendor+product",
+      "match_score": 100.0,
+      "verdict": "vulnerable",
+      "verdict_detail": "8.5p1 falls within affected range >=5.5, <9.3p2"
+    },
+    {
+      "cve_id": "CVE-2021-42013",
+      "kev_name": "Apache HTTP Server Path Traversal + RCE",
+      "kev_vendor": "Apache",
+      "kev_product": "HTTP Server",
+      "kev_description": "Apache HTTP Server 2.4.49 and 2.4.50 contain a path traversal vulnerability that can lead to remote code execution when certain modules are enabled.",
+      "kev_required_action": "Update to Apache HTTP Server 2.4.51 or later.",
+      "kev_date_added": "2021-11-03",
+      "kev_due_date": "2021-11-17",
+      "ransomware_linked": false,
+      "cwes": ["CWE-22"],
+      "package_name": "apache2",
+      "package_version": "2.4.49-1",
+      "package_vendor": "Apache Software Foundation",
+      "match_reason": "vendor+product",
+      "match_score": 100.0,
+      "verdict": "vulnerable",
+      "verdict_detail": "2.4.49-1 falls within affected range =2.4.49, =2.4.50"
+    },
+    {
+      "cve_id": "CVE-2022-0778",
+      "kev_name": "OpenSSL Infinite Loop DoS",
+      "kev_vendor": "OpenSSL",
+      "kev_product": "OpenSSL",
+      "kev_description": "OpenSSL versions 1.0.2 through 3.0.1 contain an infinite loop in BN_mod_sqrt() that can be triggered by a malicious certificate, causing denial of service.",
+      "kev_required_action": "Update to OpenSSL 3.0.2 or later.",
+      "kev_date_added": "2022-03-18",
+      "kev_due_date": "2022-04-08",
+      "ransomware_linked": false,
+      "cwes": ["CWE-835"],
+      "package_name": "openssl",
+      "package_version": "3.0.1",
+      "package_vendor": "OpenSSL Software Foundation",
+      "match_reason": "vendor+product",
+      "match_score": 100.0,
+      "verdict": "vulnerable",
+      "verdict_detail": "3.0.1 falls within affected range >=1.0.2, <3.0.2"
+    }
+  ]
+}
