@@ -90,10 +90,12 @@ def dump_verdicts(verdicts: list[Verdict], path: Path) -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "verdicts": [v.to_dict() for v in verdicts],
     }
-    Path(path).write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    Path(path).write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def load_verdicts(path: Path) -> list[Verdict]:
     """Load a list of verdicts from a JSON file previously written by `dump_verdicts`."""
-    raw = json.loads(Path(path).read_text())
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
     return [Verdict.from_dict(v) for v in raw.get("verdicts", [])]
