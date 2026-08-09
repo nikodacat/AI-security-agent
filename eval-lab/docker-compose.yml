@@ -1,0 +1,57 @@
+services:
+  # web-vuln: Apache httpd 2.4.49 — CVE-2021-42013 (path-traversal + RCE)
+  web-vuln:
+    build:
+      context: ..
+      dockerfile: eval-lab/dockerfiles/web-vuln.Dockerfile
+    container_name: eval-web-vuln
+    hostname: web-vuln
+    ports:
+      - "8081:80"
+    networks: [evallab]
+    # Small tmpfs for scanner output so we don't need bind mounts on Windows.
+    volumes:
+      - scan_output:/scan-output
+
+  # db-exposed: Redis 6.2.6 with no auth, bound to all interfaces
+  # (illustrates the "exposed data store" pattern)
+  db-exposed:
+    build:
+      context: ..
+      dockerfile: eval-lab/dockerfiles/db-exposed.Dockerfile
+    container_name: eval-db-exposed
+    hostname: db-exposed
+    ports:
+      - "16379:6379"
+    networks: [evallab]
+    volumes:
+      - scan_output:/scan-output
+
+  # cms-plugin: WordPress 5.7 on Apache (bundles known-vulnerable openssl/apache/wp-core)
+  cms-plugin:
+    build:
+      context: ..
+      dockerfile: eval-lab/dockerfiles/cms-plugin.Dockerfile
+    container_name: eval-cms-plugin
+    hostname: cms-plugin
+    ports:
+      - "8082:80"
+    environment:
+      # WordPress needs a DB — use SQLite via a well-known drop-in? Simplest:
+      # point it at a throwaway MySQL sidecar. But for scan-only purposes we
+      # don't need WP to actually serve pages, only for the vulnerable
+      # packages to be installed.
+      WORDPRESS_DB_HOST: 127.0.0.1
+      WORDPRESS_DB_USER: eval
+      WORDPRESS_DB_PASSWORD: eval
+      WORDPRESS_DB_NAME: eval
+    networks: [evallab]
+    volumes:
+      - scan_output:/scan-output
+
+networks:
+  evallab:
+    driver: bridge
+
+volumes:
+  scan_output:
