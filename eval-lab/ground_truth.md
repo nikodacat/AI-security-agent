@@ -1,9 +1,78 @@
 # eval-lab — Ground Truth
 
-**Committed 2026-08-05, before any exposure-analyzer run against this lab.**
+**Committed 2026-08-05 (original 17 entries, aspirational).**
+**Revised 2026-08-10 (added v1-scored scope, 7 entries).**
 No back-fitting: entries here reflect what a security-competent human should
 conclude from the container's software + config, deciding the verdict *from
 first principles* rather than from what the analyzer happens to output.
+
+---
+
+## Two-tier structure
+
+This document defines ground truth at two scopes:
+
+- **§ Scoring scope (v1)** — 7 CVEs the *current pipeline* actually surfaces
+  (KEV catalog ∩ dpkg-installed packages ∩ these three containers).
+  `run_eval.py` scores only these. Every entry is a patched-package CVE, so
+  the correct verdict is `MITIGATED_BY_CONFIG` — this measures whether the
+  analyzer reliably recognizes patched software as such.
+- **§ Aspirational ground truth (v2 coverage targets)** — the original 17
+  entries covering banner-detected Apache, source-built httpd, non-dpkg
+  log4j, absent SSH, and unauthenticated Redis. Documented here as the
+  full coverage target; NOT scored by `run_eval.py` today because
+  cve-matcher's KEV+dpkg substrate cannot see them. Fixing that is a v2
+  concern (scanner-widening chunk).
+
+The two tiers together give the report an honest coverage picture: "here
+is what we score, here is what we don't yet cover, here's why."
+
+---
+
+## Scoring scope (v1) — pipeline-surfaceable CVEs
+
+The 7 CVEs below are exactly what `cve-matcher` surfaces against these
+containers today (all KEV-listed and all detected via dpkg package lists).
+Every installed version is post-fix, so the schema-correct verdict is
+`MITIGATED_BY_CONFIG`. The analyzer's job is to consistently recognize this.
+
+### `eval-web-vuln`
+
+| # | CVE            | Package (version)                              | Expected verdict        | Rationale |
+|---|----------------|------------------------------------------------|-------------------------|-----------|
+| 1 | CVE-2014-0160  | libssl1.1 (1.1.1n-0+deb10u6)                   | **MITIGATED_BY_CONFIG** | Heartbleed fixed in 1.0.1g; installed 1.1.1n is far post-fix. |
+| 2 | CVE-2014-6278  | bash (5.0-4)                                   | **MITIGATED_BY_CONFIG** | Shellshock family (`env x='() { :;}; command'` variants) fixed in bash 4.3 patchlevels; installed 5.0 is post-fix. |
+
+### `eval-db-exposed`
+
+| # | CVE            | Package (version)                              | Expected verdict        | Rationale |
+|---|----------------|------------------------------------------------|-------------------------|-----------|
+| 1 | CVE-2014-0160  | libssl1.1 (1.1.1w-0+deb11u8)                   | **MITIGATED_BY_CONFIG** | Heartbleed fixed in 1.0.1g; installed 1.1.1w is far post-fix. |
+| 2 | CVE-2014-6278  | bash (5.1-2+b3)                                | **MITIGATED_BY_CONFIG** | Shellshock family fixed in bash 4.3; installed 5.1 is post-fix. |
+
+### `eval-cms-plugin`
+
+| # | CVE            | Package (version)                              | Expected verdict        | Rationale |
+|---|----------------|------------------------------------------------|-------------------------|-----------|
+| 1 | CVE-2014-0160  | libssl1.1 (1.1.1d-0+deb10u6)                   | **MITIGATED_BY_CONFIG** | Heartbleed fixed in 1.0.1g; installed 1.1.1d is post-fix. |
+| 2 | CVE-2014-6278  | bash (5.0-4)                                   | **MITIGATED_BY_CONFIG** | Shellshock family fixed in bash 4.3; installed 5.0 is post-fix. |
+| 3 | CVE-2017-8291  | ghostscript (9.27~dfsg-2+deb10u4)              | **MITIGATED_BY_CONFIG** | Ghostscript `-dSAFER` bypass fixed in 9.21; installed 9.27 is post-fix. |
+
+**v1-scored aggregate:** 7 entries, all `MITIGATED_BY_CONFIG`.
+
+---
+
+## Aspirational ground truth (v2 coverage targets)
+
+Everything below is the *original* 17-entry ground truth committed 2026-08-05.
+These CVEs are what a security-competent human should flag when looking at the
+containers, but they fall outside the current pipeline's KEV+dpkg substrate:
+Apache 2.4.49 is built from source (not dpkg), log4j is a jar file (not dpkg),
+`CVE-2022-0778` isn't in KEV (DoS-only), and OpenSSH isn't installed at all.
+
+`run_eval.py` does not score these entries today. They will move into the
+scored scope once a scanner-widening chunk (banner-grab probe, service
+enumeration, non-dpkg package detection) lands.
 
 Each row: **CVE**, **software affected**, **version present**, **detectable
 via** (what evidence a scanner needs to gather), **expected verdict** (one of
@@ -123,12 +192,30 @@ To exercise this ground truth end-to-end, chunk E needs at minimum:
 
 - `eval_results.csv` columns: `container`, `cve_id`, `expected_verdict` (from
   this file), `actual_verdict` (from analyzer), `time_seconds`, `match`
-  (boolean).
-- Success metric: analyzer verdict matches `expected_verdict` for ≥80% of
-  rows. Failures are teaching data — either the probe/analyzer needs
-  refinement, or this ground truth needs revision (and the revision is logged
-  below with reasoning, preserving the audit trail).
+  (boolean), `row_type` (`both`/`gt_only`/`pipeline_only`).
+- Success metric (v1 scoring scope): analyzer verdict matches
+  `expected_verdict` for ≥80% of `both` rows. Failures are teaching data —
+  either the analyzer prompt needs refinement, or this ground truth needs
+  revision (logged below with reasoning, preserving the audit trail).
+- Aspirational entries (17 v2 targets) will appear as `gt_only` rows in
+  eval_results.csv only after the v2 scanner-widening chunks land; today
+  they are excluded from the scored YAML.
 
 ## Revision log
 
+- **2026-08-10: v2 rescope (Path A).** Split ground truth into "v1 scored"
+  and "aspirational v2 targets" tiers. The v1 scored tier contains the 7
+  KEV+dpkg CVEs cve-matcher actually surfaces against these containers
+  (Heartbleed and Shellshock-family on patched OpenSSL/bash across all
+  three, plus a Ghostscript CVE on cms-plugin). All 7 have expected verdict
+  `MITIGATED_BY_CONFIG` because every installed package version is
+  post-fix. The original 17 entries (banner-detected Apache 2.4.49,
+  non-dpkg log4j, absent SSH, non-KEV CVE-2022-0778) move to the
+  aspirational tier and are excluded from `run_eval.py` scoring until the
+  scanner substrate widens. `ground_truth.yaml` bumped to version 2 with
+  `scoring_scope: v1-pipeline-surfaceable`. **Motivation:** the first full
+  eval run (2026-08-10) surfaced 0/17 coverage under the original scope,
+  which conflated analyzer accuracy with scanner coverage. Splitting the
+  two tiers gives an honest, individually-actionable number for each. See
+  the 2026-08-10 entry in PROJECT_STATE.md decisions log.
 - **2026-08-05: web-vuln row 5 (CVE-2023-38408) — verdict weakened from `NOT_RUNNING` to `NO_EVIDENCE` (pending; see below).** During the first end-to-end chunk-E run against `eval-web-vuln`, Claude correctly pointed out that `ssh -V` returning "not found in PATH" does not conclusively rule out `sshd` being installed at another path. `NOT_RUNNING` requires positive absence proof (`dpkg -l | grep -c openssh-server` returning 0, or `find / -name sshd -type f` returning nothing). Until a stronger absence probe is added, `NO_EVIDENCE` is the honest verdict. Applies to db-exposed row 6 as well. **Fix ownership:** chunk E follow-up probe.
