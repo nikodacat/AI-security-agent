@@ -1,0 +1,39 @@
+# Machine-readable ground-truth sidecar for run_eval.py.
+#
+# Source of truth is the narrative in ground_truth.md -- this file is
+# a mechanical extraction of the tables there. When they disagree, the
+# markdown wins; regenerate this file from it.
+#
+# Any expected_verdict change here must ALSO be logged in the revision
+# log at the bottom of ground_truth.md (the audit-trail lives there).
+
+version: 1
+committed_at: 2026-08-05
+note: |
+  Committed before any exposure-analyzer run against these containers.
+  Each entry represents what a security-competent human should conclude
+  from the container's software + config, reasoning from first principles.
+
+containers:
+  eval-web-vuln:
+    - {cve_id: CVE-2021-42013, expected: CONFIRMED,           software: apache,  detection: banner}
+    - {cve_id: CVE-2021-41773, expected: CONFIRMED,           software: apache,  detection: banner}
+    - {cve_id: CVE-2022-0778,  expected: MITIGATED_BY_CONFIG, software: openssl, detection: dpkg}
+    - {cve_id: CVE-2021-3711,  expected: MITIGATED_BY_CONFIG, software: openssl, detection: dpkg}
+    - {cve_id: CVE-2023-38408, expected: NO_EVIDENCE,         software: openssh, detection: probe, note: "revised 2026-08-05 from NOT_RUNNING (see revision log)"}
+    - {cve_id: CVE-2019-0211,  expected: MITIGATED_BY_CONFIG, software: apache,  detection: banner}
+
+  eval-db-exposed:
+    - {cve_id: CVE-2022-0543,  expected: CONFIRMED,           software: redis,   detection: probe}
+    - {cve_id: CVE-2022-0778,  expected: MITIGATED_BY_CONFIG, software: openssl, detection: dpkg}
+    - {cve_id: CVE-2022-24735, expected: CONFIRMED,           software: redis,   detection: probe}
+    - {cve_id: CVE-2022-24736, expected: CONFIRMED,           software: redis,   detection: probe}
+    - {cve_id: CVE-2023-38408, expected: NO_EVIDENCE,         software: openssh, detection: probe, note: "revised 2026-08-05 from NOT_RUNNING"}
+
+  eval-cms-plugin:
+    - {cve_id: CVE-2021-42013, expected: MITIGATED_BY_CONFIG, software: apache,  detection: banner}
+    - {cve_id: CVE-2021-40438, expected: MITIGATED_BY_CONFIG, software: apache,  detection: banner}
+    - {cve_id: CVE-2022-0778,  expected: CONFIRMED,           software: openssl, detection: dpkg}
+    - {cve_id: CVE-2021-3711,  expected: CONFIRMED,           software: openssl, detection: dpkg}
+    - {cve_id: CVE-2021-44228, expected: NOT_RUNNING,         software: log4j,   detection: probe}
+    - {cve_id: CVE-2023-38408, expected: NO_EVIDENCE,         software: openssh, detection: probe, note: "revised 2026-08-05 from NOT_RUNNING"}
