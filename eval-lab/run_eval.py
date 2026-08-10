@@ -53,7 +53,11 @@ def main(argv: list[str] | None = None) -> int:
     print()
 
     # Per-container: run the full chain (or reuse cached), collect timing.
+    # `failed` tracks containers whose pipeline errored this run — their stale
+    # verdicts.json (if any) must NOT be scored, or a failed run silently
+    # falls back to an old successful one and hides the failure.
     timings: dict[str, float] = {}
+    failed: set[str] = set()
     for c in containers:
         if args.reuse_existing and (REPORTS_DIR / c / "verdicts.json").exists():
             print(f"[reuse]   {c}: using cached {REPORTS_DIR / c / 'verdicts.json'}")
@@ -67,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         timings[c] = elapsed
         if rc != 0:
             print(f"          FAILED (rc={rc}); skipping this container's rows")
+            failed.add(c)
             continue
         print(f"          done in {elapsed:.1f}s")
 
@@ -75,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[dict[str, Any]] = []
     for c in containers:
         expected_by_cve = {e["cve_id"]: e for e in gt["containers"].get(c, [])}
-        actual_by_cve = _load_verdicts(c)
+        actual_by_cve = {} if c in failed else _load_verdicts(c)
 
         for cve_id, gt_entry in expected_by_cve.items():
             actual = actual_by_cve.pop(cve_id, None)
