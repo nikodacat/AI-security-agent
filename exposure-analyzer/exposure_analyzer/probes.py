@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProbeTemplate:
     """A single non-destructive verification command for a specific CVE.
 
@@ -28,6 +28,16 @@ class ProbeTemplate:
       safe                : True if the probe is guaranteed non-destructive
                             (read-only, no state change). All v1 probes MUST
                             be safe=True. Attempting to add safe=False raises.
+
+    Threat model for the safe=True invariant:
+      This blocks *accidental* registration of destructive probes and
+      *accidental* mutation post-construction (via `frozen=True`). It does
+      NOT prevent a determined attacker with Python access from bypassing
+      via subclassing that overrides `__post_init__` or by directly
+      inserting into `KNOWN_PROBES`. Those attacks are out of scope --
+      anyone with arbitrary Python execution already owns the process.
+      The invariant exists to catch developer mistakes, not to be a
+      security boundary.
     """
 
     command: str

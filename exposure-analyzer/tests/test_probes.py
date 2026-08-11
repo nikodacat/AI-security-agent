@@ -17,6 +17,16 @@ class TestProbeTemplate(unittest.TestCase):
         with self.assertRaises(ValueError):
             ProbeTemplate(command="rm -rf /", safe=False)
 
+    def test_probe_is_frozen_cannot_be_mutated(self):
+        # Chunk V (verification) finding: catches accidental post-construction
+        # mutation like `p.safe = False`. Not a security boundary (a subclass
+        # can still bypass __post_init__), just a developer-mistake guard.
+        p = ProbeTemplate(command="echo ok")
+        with self.assertRaises(Exception) as cm:
+            p.safe = False  # type: ignore[misc]
+        # dataclass frozen raises FrozenInstanceError which is a subclass of AttributeError
+        self.assertIn("cannot assign", str(cm.exception).lower())
+
 
 class TestKnownProbes(unittest.TestCase):
     def test_ssh_probe_registered(self):

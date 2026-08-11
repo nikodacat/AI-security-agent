@@ -1,0 +1,8 @@
+# eval-lab harness runtime dependencies.
+#
+# The eval driver (run_eval.py) reads ground_truth.yaml with pyyaml,
+# and orchestrates run_full_scan.py which imports cve-matcher and
+# exposure-analyzer via sys.path. Those two modules bring their own
+# requirements.txt -- install those separately before running eval.
+
+pyyaml>=6.0

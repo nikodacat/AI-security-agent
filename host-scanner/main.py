@@ -16,8 +16,18 @@ from rich.table import Table
 console = Console()
 
 
-def load_config(path: str = "config.yaml") -> dict:
-    with open(path, "r") as f:
+_DEFAULT_CONFIG = Path(__file__).resolve().parent / "config.yaml"
+
+
+def load_config(path: str | Path | None = None) -> dict:
+    """Load host-scanner config.
+
+    Defaults to the config.yaml living alongside this file, so the scanner
+    works no matter where the caller cd'd from (previously required cwd to
+    be host-scanner/ — see docs/VERIFICATION.md).
+    """
+    p = Path(path) if path is not None else _DEFAULT_CONFIG
+    with open(p, "r") as f:
         return yaml.safe_load(f)
 
 
