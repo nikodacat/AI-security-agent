@@ -72,22 +72,23 @@ claude --version && claude login
 # 4. (Optional) NVD API key to lift rate limits on version-check pass
 export NVD_API_KEY=...
 
-# 5. Run a scan on THIS server
-source .venv/bin/activate
-cd host-scanner && python main.py        # writes reports/report_*.html
+# 5. End-to-end scan of THIS server (one command, all three modules)
+./scripts/scan-local-host.sh --engine=claude --check-versions
+# -> results in ./scan-results/<hostname>-<timestamp>/
+#      scan.json / candidates.json / host_state.json / verdicts.json / report.html
 
-# 6. (Optional) Add the AI verdict layer
-cd ../cve-matcher && python -m cve_matcher scan --check-versions   # candidates
-cd ../exposure-analyzer && python -m exposure_analyzer analyze \
-    --candidates ../cve-matcher/reports/candidates.json \
-    --host-state ../host-scanner/reports/raw_*.json \
-    --engine claude \
-    --report ../host-scanner/reports/report_*.html
+# 5b. Alternatively: standalone host-scanner (no AI, no CVE analysis)
+cd host-scanner && python main.py        # writes reports/report_*.html
 ```
 
-Steps 5 and 6 are independent. Step 5 is a standalone scan (works with
-zero AI dependencies). Step 6 layers Claude reasoning on top for
-per-CVE verdicts.
+Step 5 is what you want on a real server — it runs host-scanner
+(inventory), cve-matcher (KEV match + optional NVD version-check), and
+exposure-analyzer (Claude reasoning) as one pipeline against the local
+host and produces per-CVE verdicts + an HTML report. `--engine=fake`
+gives you the pipeline without AI cost for a dry run.
+
+Step 5b is the pre-existing host-scanner CLI standalone — useful when
+you only want the scan-and-analyze report without the CVE verdict layer.
 
 For platform-specific detail: `host-scanner/LINUX.md`.
 
