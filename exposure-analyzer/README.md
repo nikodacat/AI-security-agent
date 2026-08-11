@@ -37,14 +37,12 @@ raise `NotImplementedError` — that's expected.
 ## Planned CLI (once implemented)
 
 ```bash
-# Interactive mode: operator confirms each probe
-python -m exposure_analyzer \
+# All probes are safe=True by construction (see probes.py) so runs are
+# non-interactive by default -- no per-probe confirmation prompt.
+python -m exposure_analyzer analyze \
     --candidates ../cve-matcher/reports/candidates.json \
     --host-state ../host-scanner/reports/host_state.json \
     --output ./reports/verdicts.json
-
-# Batch mode: no prompts
-python -m exposure_analyzer ... --batch
 ```
 
 ## Development notes

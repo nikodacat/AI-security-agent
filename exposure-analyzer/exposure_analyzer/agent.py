@@ -39,13 +39,20 @@ class AgentConfig:
     """Runtime configuration for a single analyzer session.
 
     Fields:
-      interactive         : if True, ask the operator to confirm each probe.
       run_probes          : if False, skip probe execution entirely.
       probe_timeout_sec   : wall-clock cap for a single probe.
       max_output_chars    : cap on captured probe output.
+
+    Design note (chunk F): earlier versions carried an `interactive` field
+    intended to gate "run this probe? [y/N]" prompts before each probe. It
+    was removed because `ProbeTemplate.__post_init__` already refuses to
+    register any probe with safe=False, so v1's KNOWN_PROBES is safe by
+    construction and per-probe confirmation is redundant friction. If v2
+    adds higher-risk probes (writes state, non-loopback network calls),
+    re-introduce the gate at THAT point with a specific threat model in
+    mind, not preemptively.
     """
 
-    interactive: bool = True
     run_probes: bool = True
     probe_timeout_sec: float = 10.0
     max_output_chars: int = 4000

@@ -71,10 +71,19 @@ chunk). Don't just let it go stale.
   (Apache CVE-2021-42013, Redis unauth exposure, WordPress plugin CVE, etc.).
   Analyzer loops over all candidates, produces verdicts for each.
 
-- [ ] **F. `--batch` mode.**
+- [x] **F. `--batch` mode.**
   Depends on: D.
   Outcome: same code path serves interactive + batch; batch answers all
   "run this probe?" prompts automatically.
+  **Resolved 2026-08-10 as chosen-not-to-implement.** Reason: v1
+  `ProbeTemplate.__post_init__` refuses to register any probe with
+  `safe=False`, so the entire `KNOWN_PROBES` library is non-destructive
+  by construction and runtime per-probe confirmation is redundant. The
+  `AgentConfig.interactive` field + CLI `--batch` flag were removed
+  (they were no-ops -- the analyzer never actually consumed the flag).
+  If v2 introduces higher-risk probes (state-mutating, non-loopback
+  network calls), reintroduce the confirmation gate with a specific
+  threat model in mind, not preemptively.
 
 - [ ] **H. `ground_truth.md` in `eval-lab/`.**
   Depends on: G.

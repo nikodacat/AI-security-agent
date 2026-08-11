@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"      wrote {len(verdicts)} verdict(s) -> {verdicts_path}")
         return 0
 
-    agent_cfg = AgentConfig(interactive=False, run_probes=not args.no_probes)
+    agent_cfg = AgentConfig(run_probes=not args.no_probes)
     probe_runner = docker_exec_probe_runner(args.container, agent_cfg)
     agent = ExposureAgent(verdict_fn=verdict_fn, config=agent_cfg, probe_runner=probe_runner)
 

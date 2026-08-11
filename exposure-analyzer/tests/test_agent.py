@@ -81,7 +81,7 @@ class TestExposureAgentBatch(unittest.TestCase):
 
         agent = ExposureAgent(
             verdict_fn=fake_llm,
-            config=AgentConfig(interactive=False),
+            config=AgentConfig(),
             probe_runner=_fake_probe_runner,
         )
         verdict = _run(agent.analyze(_SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE))
@@ -101,7 +101,7 @@ class TestExposureAgentBatch(unittest.TestCase):
 
         agent = ExposureAgent(
             verdict_fn=fake_llm,
-            config=AgentConfig(interactive=False),
+            config=AgentConfig(),
             probe_runner=_fake_probe_runner,
         )
         verdict = _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
@@ -123,7 +123,7 @@ class TestExposureAgentBatch(unittest.TestCase):
         ]
         agent = ExposureAgent(
             verdict_fn=fake_llm,
-            config=AgentConfig(interactive=False, run_probes=False),
+            config=AgentConfig(run_probes=False),
         )
         verdicts = _run(agent.analyze_batch(candidates, _SAMPLE_HOST_STATE))
 

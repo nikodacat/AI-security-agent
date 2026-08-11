@@ -61,8 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Run probes inside a docker container via `docker exec` "
                                 "instead of on the local machine. Use for eval-lab runs "
                                 "(e.g. --target-container=eval-web-vuln).")
-    p_analyze.add_argument("--batch", action="store_true",
-                           help="Non-interactive: auto-answer probe prompts. Default is interactive.")
+    # --batch removed in chunk F (2026-08-10): was a no-op wired to
+    # AgentConfig.interactive, which the analyzer never actually consumed.
+    # See ROADMAP.md chunk F for the design decision.
 
     return p
 
@@ -100,7 +101,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         except RuntimeError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        agent_cfg = AgentConfig(interactive=not args.batch, run_probes=not args.no_probes)
+        agent_cfg = AgentConfig(run_probes=not args.no_probes)
         probe_runner = None
         if args.target_container:
             probe_runner = docker_exec_probe_runner(args.target_container, agent_cfg)
