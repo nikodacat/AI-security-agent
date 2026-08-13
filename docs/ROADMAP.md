@@ -19,40 +19,58 @@ chunk). Don't just let it go stale.
 
 ---
 
+## At-a-glance status (2026-08-12)
+
+**Code chunks (A-J + F + P + V): all done and verified.** Remaining work is
+report writing (K/L/M), defense prep (N), and the release tag (O).
+Detailed per-chunk decision rationale + timings in `PROJECT_STATE.md`
+decisions log.
+
+```
+[x] A B C D E F G H I J P V        code + eval + verification
+[ ] K L M N O                       report + defense + tag
+```
+
+---
+
 ## Now (start immediately)
 
-- [ ] **A. Rename modules to `host-scanner/` + `cve-matcher/`.**
+- [x] **A. Rename modules to `host-scanner/` + `cve-matcher/`.**
   Outcome: renames applied; all imports, launchers (`run_cli.*`, `run_web.*`),
   `.gitignore` paths, README/LINUX.md/UPSTREAM.md/SETUP-FORKS.md, and
   `scripts/init-repo.ps1` sanity guards updated. Existing scans (host-scanner
   alone; cve-matcher standalone) still run end-to-end. One commit.
+  **Done: commit `ff16f9e`.**
 
-- [ ] **B. Scaffold `exposure-analyzer/` package.**
+- [x] **B. Scaffold `exposure-analyzer/` package.**
   Depends on: A.
   Outcome: `exposure-analyzer/exposure_analyzer/{agent,probes,prompts,report}.py`
   exist with empty implementations and clear docstrings. `python -c "from exposure_analyzer import agent, probes, prompts, report"`
   succeeds. `requirements.txt` and a minimal README added.
+  **Done: commit `36c1ef3`.**
 
 ---
 
 ## Next (once Now is done)
 
-- [ ] 🔀 **G. `eval-lab/` Docker Compose (3 vulnerable containers).**
+- [x] 🔀 **G. `eval-lab/` Docker Compose (3 vulnerable containers).**
   Independent of A-B — can run in parallel.
   Outcome: `cd eval-lab && docker compose up -d` spawns three named
   containers (web-vuln, db-exposed, cms-plugin) each with deliberate CVEs.
   `docker exec container-name python -m host_scanner` completes without
   error. Compose file + Dockerfiles committed.
+  **Done: commit `8a65edc`. Build hurdles logged in PROJECT_STATE (buster EOL, pip <23 pyproject issue, redis missing dir).**
 
-- [ ] **C. Verdict schema + report integration.**
+- [x] **C. Verdict schema + report integration.**
   Depends on: B.
   Outcome: verdict dict shape defined (`CONFIRMED` / `MITIGATED_BY_CONFIG` /
   `MITIGATED_BY_EXPOSURE` / `NOT_RUNNING` / `NO_EVIDENCE` + `reason` +
   `evidence`). Given a hardcoded fake verdict, `exposure-analyzer` produces
   `verdicts.json` and appends a section to host-scanner's HTML report.
   No AI in the loop yet — this proves plumbing before adding intelligence.
+  **Done: bundled into commit `2d47469` (Chunks C-E).**
 
-- [ ] 🎯 **D. First probe end-to-end (risk validator).**
+- [x] 🎯 **D. First probe end-to-end (risk validator).**
   Depends on: C. Real testing needs G but a localhost mock is acceptable
   as an interim.
   Outcome: one CVE (OpenSSH `CVE-2023-38408`) — hardcoded probe (`ssh -V localhost`),
@@ -60,16 +78,18 @@ chunk). Don't just let it go stale.
   verdict + reasoning, appends to report. This is the architectural proof:
   if the Agent SDK loop, prompt shape, or subscription-backed CLI path has
   a fundamental problem, it surfaces here — not in week 8.
+  **Done: bundled into commit `2d47469`. Live Claude smoke-test verified.**
 
 ---
 
 ## Later (once D is green — repeat the pattern + write)
 
-- [ ] **E. Probe library expansion (4-5 more probes).**
+- [x] **E. Probe library expansion (4-5 more probes).**
   Depends on: D.
   Outcome: `probes.py` has hardcoded probe templates for the demo-lab CVEs
   (Apache CVE-2021-42013, Redis unauth exposure, WordPress plugin CVE, etc.).
   Analyzer loops over all candidates, produces verdicts for each.
+  **Done: bundled into commit `2d47469`. 4 probes added: Apache x2, Redis, Log4j. Added `docker_exec_probe_runner` + `--target-container` CLI flag.**
 
 - [x] **F. `--batch` mode.**
   Depends on: D.
@@ -85,21 +105,50 @@ chunk). Don't just let it go stale.
   network calls), reintroduce the confirmation gate with a specific
   threat model in mind, not preemptively.
 
-- [ ] **H. `ground_truth.md` in `eval-lab/`.**
+- [x] **H. `ground_truth.md` in `eval-lab/`.**
   Depends on: G.
   Outcome: per-container CVE list with expected verdict + reasoning,
   written BEFORE any analyzer run (no back-fitting). Committee-defensible.
+  **Done: commit `82242df`. 18 CVE datapoints (later rescoped to 7 in ground_truth v2 — see chunk P).**
 
-- [ ] **I. `run_full_scan.sh` wrapper (top level).**
+- [x] **I. `run_full_scan.sh` wrapper (top level).**
   Depends on: D, E.
   Outcome: `./run_full_scan.sh <container>` chains host-scanner → cve-matcher →
   exposure-analyzer → HTML report in one command.
+  **Done: commit `60bdb2e`. Real-server counterpart `scripts/scan-local-host.sh` added in commit `1f24221`.**
 
-- [ ] **J. Full eval runs + `eval_results.csv`.**
+- [x] **J. Full eval runs + `eval_results.csv`.**
   Depends on: E, F, G, H, I.
   Outcome: `run_eval.sh` runs the pipeline across all 3 containers, writes
   a CSV with columns `container`, `cve_id`, `expected_verdict`,
   `actual_verdict`, `time_seconds`. ~30 datapoints total.
+  **Done: commits `39db4c6` (scaffolding) + `60f53ba` (execution). Baseline 14%, rose to 100% after chunk P prompt fix. CSV has 3 row types (both/gt_only/pipeline_only) for honest coverage picture, not vanity accuracy.**
+
+---
+
+## Added mid-build (2026-08-10)
+
+- [x] **P. Prompt tightening (14% → 100% on scored set).**
+  Not in the original roadmap. Added after chunk J revealed a systematic
+  verdict-labeling inconsistency: analyzer's *reasoning* was correct on
+  every case, but the *verdict label* was inconsistent (`NO_EVIDENCE` and
+  `NOT_RUNNING` mistakenly used where `MITIGATED_BY_CONFIG` was correct).
+  Three-line SYSTEM_PROMPT edit resolved it.
+  **Done: commit `b338f05`. Report chapter 5 narrative: "measured → root-caused → patched → re-measured, 14→100% on one prompt edit."**
+
+- [x] **V. Verification / review-stage pass.**
+  Not in the original roadmap. Formal review-stage audit written into
+  `docs/VERIFICATION.md` (Phase 1 Claude independent + Phase 2b
+  adversarial self-review). Fixed 5 deployment gaps inline (missing
+  `eval-lab/requirements.txt`, `LICENSE`, `bootstrap-linux.sh`,
+  host-scanner cwd bug, cve-matcher requirements comment). Test count
+  38 → 52; coverage 52 → 87%. Discovered + fixed over-claimed
+  `safe=True` invariant (now `frozen=True` dataclass).
+  **Done: commit `c5bc1ce`. Substitutes for the deferred formal dual-engine cross-review — see PROJECT_STATE for the `agy`-tooling issue that blocked the Gemini path.**
+
+---
+
+## Later (report + defense + tag)
 
 - [ ] **K. Report chapters 1-3 draft.**
   Depends on: (design finalized — already true).
@@ -146,11 +195,20 @@ chunk). Don't just let it go stale.
 
 ## Changed-plan log
 
-*(add entries here as the roadmap gets revised mid-build. Format: `YYYY-MM-DD: chunk X — what changed and why`)*
+- **2026-08-10: chunk F — resolved as chosen-not-to-implement.** `AgentConfig.interactive` field + CLI `--batch` flag were no-ops (analyzer never consumed the flag); `ProbeTemplate.__post_init__` already enforces `safe=True` at construction, making per-probe runtime confirmation redundant. Removed both. See chunk F entry above for full rationale + v2 re-entry criteria.
+- **2026-08-10: added chunk P** (prompt tightening) — surfaced by chunk J's 14% baseline. Not originally planned; added because the eval loop discovered a real, measurable issue that a targeted prompt edit could fix.
+- **2026-08-10: added chunk V** (verification pass) — review-stage audit written into `docs/VERIFICATION.md`. Not originally planned but recommended by dev-pipeline SKILL for the review stage before defense.
+- **2026-08-10: ground_truth rescope (Path A).** Original ground_truth (18 aspirational CVEs) split into v1-scored subset (7 KEV∩dpkg CVEs the pipeline can actually see) + aspirational v2 targets. Reason: honest scoring against what the tool can surface today rather than against what it could surface if the scanner were extended.
 
 ---
 
 ## Handoff
 
-Next step: invoke `/build-verify-loop` and start on chunk A (rename modules).
-Each chunk in this file is small enough to be a single build-verify-loop cycle.
+Code + eval + verification chunks (A/B/C/D/E/F/G/H/I/J/P/V) all done as of
+2026-08-12. Next chunk is **K** (report chapters 1-3: 緒論 / 相關研究 /
+系統設計). Suggested workflow for K: one chapter at a time so direction
+mistakes stay contained to one chapter's worth of prose.
+
+Each remaining chunk is still small enough for a single `/build-verify-loop`
+cycle. For writing chunks (K/L/M), the loop shape is: draft → advisor
+review → revise, per chapter.
