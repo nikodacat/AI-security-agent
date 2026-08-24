@@ -1,5 +1,5 @@
 # ===========================================================
-# Top-level .gitignore for nikodacat/AI-security-agant
+# Top-level .gitignore for nikodacat/AI-security-agent
 # ===========================================================
 # What this repo tracks:
 #   host-scanner/   (this project)
@@ -107,6 +107,12 @@ cve-matcher/reports/
 **/reports/*.html
 **/reports/*.md
 **/reports/*.pdf
+
+# scan-results/ holds the output of scripts/scan-local-host.sh runs against
+# the operator's own machine — contains hostnames, package inventories,
+# NVD lookups. Regenerated on demand; never commit.
+scan-results/
+**/scan-results/
 
 # -----------------------------------------------------------
 # Project: API response caches (regenerated on demand)
