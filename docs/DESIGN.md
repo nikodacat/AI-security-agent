@@ -1,6 +1,9 @@
 # AI-security-agent — Design & Decisions
 
-**Project:** Cross-platform gray-box automated security assessment tool for school servers.
+**Project:** Cross-platform AI-augmented vulnerability assessment tool for school servers.
+v1 operates from a **host-level white-box** posture (authorized privileged access on
+the target); v2 extends to **gray-box** by adding an external attacker-perspective leg
+and adversarial simulation. See §1 for the precise definitions used in this project.
 **Level:** Undergraduate 畢業專題 (not master's thesis).
 **Runway:** ~3 months (12 weeks) as of this document.
 **Repo:** https://github.com/nikodacat/AI-security-agent (private).
@@ -13,14 +16,67 @@ a break, read this file first — it replaces the need to re-grill.
 
 ## 1. Thesis claim
 
-> An AI-augmented **gray-box** security assessment tool that automates the reasoning
-> pentesters do between "we detected a candidate CVE" and "here's whether it actually matters
-> on this host." Primary target: school servers. Secondary demo: home Windows desktop.
+> An AI-augmented vulnerability assessment tool that automates the reasoning pentesters
+> do between "we detected a candidate CVE" and "here's whether it actually matters on
+> this host." Primary target: school servers. Secondary demo: home Windows desktop.
 
-Gray-box = authorized insider access. Not black-box (external attacker with no info) and not
-white-box (full source access). Insider intel (`host-scanner`) is combined with external
-threat intel (`cve-matcher` against KEV/NVD) and synthesized by an AI reasoning layer
-(`exposure-analyzer`) that produces per-CVE verdicts without needing actual exploitation.
+### 1.1 Access-model taxonomy used in this project
+
+Precise definitions matter here because "gray-box" is used inconsistently across
+industry (vulnerability scanning vs. penetration testing). This project uses the
+following four-way split:
+
+- **Black-box** — external attacker perspective only; no credentials, no internal
+  visibility. Simulates an outsider with no prior access.
+- **Gray-box (pentesting sense)** — insider intel + attacker perspective, cross-referenced.
+  Typical example: authenticated-user testing of a web app *combined with* external
+  service probing. This is what the pentesting literature (PTES, OSSTMM) means by the
+  term.
+- **Host-level white-box** — administrator-equivalent access on the target: package
+  inventory, configuration files, running processes, filesystems. Corresponds to
+  credentialed vulnerability scanning (Nessus, OpenVAS, Qualys with credentials) and
+  configuration-audit tools (CIS benchmarks, Lynis, OpenSCAP). NOT application source
+  review — the tool sees what the sysadmin sees, not what the developer sees.
+- **White-box (source-review sense)** — full application source access, architecture
+  documents, and typically the ability to instrument or rebuild the software under test.
+  Out of scope for this project at both v1 and v2.
+
+### 1.2 v1 posture: host-level white-box
+
+v1 operates from **host-level white-box** access. Insider intel comes from the
+`host-scanner` module (dpkg queries, config file reads, process lists) and from
+non-destructive probes executed on the target via `docker exec` (eval-lab) or shell
+(real target). External threat intel comes from the `cve-matcher` module (CISA KEV
+catalog + NVD version-range checks, offline). The `exposure-analyzer` module then uses
+a Claude Agent SDK loop to synthesize both streams into per-CVE verdicts without any
+actual exploitation.
+
+**What v1 deliberately lacks (the gap that keeps this from being gray-box in the
+pentesting sense):** no external attacker-perspective validation. Reachability of a
+port bound to `0.0.0.0`, for instance, is inferred from configuration rather than
+measured from a separate vantage point. Every "exposure" verdict in v1 is a
+config-inference verdict.
+
+### 1.3 v2 posture: gray-box (planned)
+
+v2 closes the gap by adding the external leg:
+
+1. **`network-prober` module** — external service verification (nmap-style port scan,
+   banner grab, TLS handshake) run from a separate host. Cross-references
+   host-scanner's "bound to 0.0.0.0" claims with actual reachability measurements.
+2. **`attack-simulator` module (PentestGPT bridge)** — adversarial reasoning layer
+   that turns a v1 verdict + external reachability into an attack-path plan. Still
+   advisory (no live exploitation), still with human-in-the-loop confirmation.
+3. **Dynamic probe generation with allow-list + HITL** — the analyzer's probe library
+   moves from strictly hardcoded (v1) to hybrid: hardcoded first, LLM-suggested
+   probes only if they pass a structured-argv allow-list AND get operator approval
+   before running. Generated probes that survive HITL get added to the library.
+4. **`fix-publisher` module** — automated remediation drafts (patch commands,
+   config diffs) for CONFIRMED findings, operator-approved before application.
+
+The v1 → v2 transition is the shift from "authorized-insider audit" to
+"insider-plus-outsider gray-box pentest." The v1 pipeline stays intact and becomes
+the insider leg of the v2 gray-box workflow.
 
 ---
 
@@ -174,7 +230,7 @@ Dashed boxes = v2 (skeletons only in v1 build). Solid boxes = v1 must-work by de
 |---|---|---|---|
 | 1 | 緒論 (Introduction) | 2 | motivation, professor's ask, scope |
 | 2 | 相關研究 (Related Work) | 2 | Nessus/OpenVAS comparison table, PentestGPT, KEV/NVD |
-| 3 | 系統設計 (System Design) | 4 | gray-box methodology, three-module architecture, diagrams |
+| 3 | 系統設計 (System Design) | 4 | access-model taxonomy (host-level white-box → v2 gray-box), three-module architecture, diagrams |
 | 4 | 實作 (Implementation) | 3 | interesting design decisions, key snippets, prompt engineering |
 | 5 | 評估 (Evaluation) | 5 | lab, methodology, TPR/FPR results, capability comparison, threats to validity |
 | 6 | 討論與未來工作 (Discussion & Future Work) | 2 | limitations, v2/v3 roadmap |
