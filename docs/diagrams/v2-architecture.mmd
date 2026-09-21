@@ -1,0 +1,68 @@
+%% v2 architecture — gray-box (coordinator + target split)
+%% Source of truth. Rendered into docs/DESIGN.md §1.4 and cited from PROJECT_STATE.md § Roadmap → v2.
+%% Update this file when the architecture changes; do not diverge the DESIGN.md copy silently.
+
+flowchart TB
+    subgraph COORD["coordinator host (operator laptop / eval-attacker container)"]
+        direction TB
+        NP["network-prober/<br/><i>external leg</i><br/>python-nmap · banner-grab · TLS handshake"]
+        HS["host-scanner/<br/><i>insider leg (v1)</i><br/>packages · configs · ports<br/>runs via ssh or docker exec"]
+        CM["cve-matcher/<br/>KEV alias + NVD version-range"]
+        EA["exposure-analyzer/<br/>Claude Agent SDK loop<br/>KNOWN_PROBES ⊕ learned_probes.jsonl<br/>dynamic probe proposal · HITL gate<br/>per-CVE verdict engine"]
+        AS["attack-simulator/<br/>per-CONFIRMED LLM call<br/>prompt-adapter fidelity<br/>text narrative"]
+        FP["fix-publisher/<br/>per-CONFIRMED apt+config+restart<br/>advisory drafts, no execute"]
+        LP[("learned_probes.jsonl<br/>append-only · git-tracked<br/>sha256(argv_tuple) identity")]
+        KEV[("CISA KEV<br/>daily cached")]
+        NVD[("NVD API<br/>30d cache")]
+        CC["Claude Code CLI<br/>subscription-backed"]
+    end
+
+    subgraph TGT["target host(s) — untrusted from the coordinator's POV"]
+        direction TB
+        T1["shell (ssh / docker exec)"]
+        T2["external ports (nmap surface)"]
+    end
+
+    subgraph EL["eval-lab/ (Docker Compose)"]
+        C1["eval-web-vuln"]
+        C2["eval-db-exposed"]
+        C3["eval-cms-plugin"]
+        BM[("shared bind-mount<br/>network_state.json drop")]
+    end
+
+    NP -->|"emits<br/>network_state.json"| EA
+    HS -->|"host_state.json"| CM
+    CM -->|"candidates.json"| EA
+    HS -->|"config + service context"| EA
+
+    LP -.->|"merge at startup"| EA
+    KEV -.-> CM
+    NVD -.-> CM
+    CC -.->|"probe + verdict reasoning"| EA
+    CC -.->|"attack narrative"| AS
+    CC -.->|"remediation drafting"| FP
+
+    EA -->|"verdicts.json"| AS
+    EA -->|"verdicts.json"| FP
+    EA -->|"report section"| RPT["HTML report + remediation.md"]
+    AS -->|"attack narrative section"| RPT
+    FP -->|"fix section + standalone .md"| RPT
+
+    EA -.->|"HITL-approved new probes"| LP
+
+    NP -.->|"probes (lab)"| T2
+    NP -.->|"probes (prod)"| T2
+    HS -.->|"reads inventory"| T1
+
+    T1 -.->|"docker exec (lab)"| C1
+    T1 -.->|"docker exec (lab)"| C2
+    T1 -.->|"docker exec (lab)"| C3
+    T2 -.->|"maps to container ports"| C1
+    T2 -.->|"maps to container ports"| C2
+    T2 -.->|"maps to container ports"| C3
+    NP -.->|"file drop"| BM
+    BM -.->|"read as local file"| EA
+
+    style COORD fill:#f5f5ff,stroke:#446
+    style TGT fill:#fff5f5,stroke:#844
+    style EL stroke-dasharray: 3 3
