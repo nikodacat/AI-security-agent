@@ -1,0 +1,32 @@
+[
+  {
+    "target": "db-exposed",
+    "port": 6379,
+    "protocol": "tcp",
+    "reachable": true,
+    "banner": "Redis key-value store 6.2.6",
+    "service_guess": {
+      "vendor": "Redis",
+      "product": "Redis",
+      "version": "6.2.6"
+    }
+  },
+  {
+    "target": "db-exposed",
+    "port": 22,
+    "protocol": "tcp",
+    "reachable": false
+  },
+  {
+    "target": "db-exposed",
+    "port": 80,
+    "protocol": "tcp",
+    "reachable": false
+  },
+  {
+    "target": "db-exposed",
+    "port": 443,
+    "protocol": "tcp",
+    "reachable": false
+  }
+]
