@@ -114,6 +114,12 @@ cve-matcher/reports/
 scan-results/
 **/scan-results/
 
+# eval-lab/prober-output/ is the host bind-mount for eval-attacker's
+# network-prober outputs (network_state.json + friends). Regenerated per
+# eval run; keep the directory (via .gitkeep) but ignore its contents.
+eval-lab/prober-output/*
+!eval-lab/prober-output/.gitkeep
+
 # -----------------------------------------------------------
 # Project: API response caches (regenerated on demand)
 # -----------------------------------------------------------
