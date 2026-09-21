@@ -26,6 +26,7 @@ from .agent import (
     build_claude_verdict_fn,
     docker_exec_probe_runner,
 )
+from .proposal import build_claude_proposer_fn
 from .report import append_verdicts_to_report, render_verdicts_summary
 from .verdicts import Verdict, VerdictType, dump_verdicts
 
@@ -57,6 +58,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--no-probes", action="store_true",
                            help="Skip probe execution (claude engine only). "
                                 "Useful when host-state is imported from another machine.")
+    p_analyze.add_argument("--propose-probes", action="store_true", default=False,
+                           help="Ask LLM to propose a non-destructive probe when no "
+                                "known probe exists for a CVE (claude engine only).")
     p_analyze.add_argument("--target-container", default=None,
                            help="Run probes inside a docker container via `docker exec` "
                                 "instead of on the local machine. Use for eval-lab runs "
@@ -122,10 +126,18 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         probe_runner = None
         if args.target_container:
             probe_runner = docker_exec_probe_runner(args.target_container, agent_cfg)
+        probe_proposer = None
+        if args.propose_probes:
+            try:
+                probe_proposer = build_claude_proposer_fn()
+            except RuntimeError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
         agent = ExposureAgent(
             verdict_fn=verdict_fn,
             config=agent_cfg,
             probe_runner=probe_runner,
+            probe_proposer=probe_proposer,
         )
         try:
             verdicts = asyncio.run(
@@ -135,6 +147,8 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             print(f"error: analyzer failed: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
         engine_label = "claude (via claude-agent-sdk)"
+        if args.propose_probes:
+            engine_label += " + probe-proposer"
         if network_state is not None:
             engine_label += f" + network_state ({len(network_state)} obs)"
 

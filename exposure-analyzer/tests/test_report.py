@@ -123,6 +123,74 @@ class TestAppendToReport(unittest.TestCase):
             self.assertIn("Exposure Verdicts", html)
 
 
+class TestProposedProbeRendering(unittest.TestCase):
+    """v2-7: proposed_probe + probe_proposal_error must render in the HTML
+    report so a reviewer can see what the analyzer would have wanted to run."""
+
+    def _write_report(self, td: Path) -> Path:
+        p = td / "report.html"
+        p.write_text(_MINIMAL_REPORT_HTML, encoding="utf-8")
+        return p
+
+    def test_proposed_probe_appears_in_report(self):
+        verdicts = [Verdict(
+            cve_id="CVE-9999-9999",
+            verdict=VerdictType.NO_EVIDENCE,
+            reason="no known probe, model proposed one",
+            evidence={},
+            proposed_probe={
+                "binary": "dpkg",
+                "args": ["-l", "libssl1.1"],
+                "rationale": "check pkg",
+                "expected_signals": [],
+            },
+        )]
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            report = self._write_report(td)
+            append_verdicts_to_report(verdicts, report)
+            html = report.read_text(encoding="utf-8")
+            self.assertIn("proposed (not executed)", html)
+            self.assertIn("dpkg -l libssl1.1", html)
+
+    def test_proposal_error_appears_in_report(self):
+        verdicts = [Verdict(
+            cve_id="CVE-9999-9998",
+            verdict=VerdictType.NO_EVIDENCE,
+            reason="proposer rejected",
+            evidence={},
+            probe_proposal_error="binary 'bash' is a shell wrapper; refused",
+        )]
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            report = self._write_report(td)
+            append_verdicts_to_report(verdicts, report)
+            html = report.read_text(encoding="utf-8")
+            self.assertIn("proposal rejected", html)
+            self.assertIn("shell wrapper", html)
+
+    def test_proposal_html_special_chars_escaped(self):
+        verdicts = [Verdict(
+            cve_id="CVE-9999-9997",
+            verdict=VerdictType.NO_EVIDENCE,
+            reason="xss check",
+            evidence={},
+            proposed_probe={
+                "binary": "find",
+                "args": ["<script>x</script>"],
+                "rationale": "",
+                "expected_signals": [],
+            },
+        )]
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            report = self._write_report(td)
+            append_verdicts_to_report(verdicts, report)
+            html = report.read_text(encoding="utf-8")
+            self.assertNotIn("<script>x</script>", html)
+            self.assertIn("&lt;script&gt;", html)
+
+
 class TestRenderVerdictsSummary(unittest.TestCase):
     def test_empty(self):
         self.assertEqual(render_verdicts_summary([]), "(no verdicts)")

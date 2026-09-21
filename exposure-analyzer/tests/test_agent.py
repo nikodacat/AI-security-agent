@@ -12,7 +12,7 @@ from exposure_analyzer.agent import (
     _parse_verdict_response,
 )
 from exposure_analyzer.probes import ProbeTemplate
-from exposure_analyzer.verdicts import VerdictType
+from exposure_analyzer.verdicts import Verdict, VerdictType
 
 
 _SAMPLE_CANDIDATE = {
@@ -189,6 +189,197 @@ class TestExposureAgentNetworkState(unittest.TestCase):
         self.assertEqual(len(prompts_seen), 2)
         for p in prompts_seen:
             self.assertIn("External-attacker view", p)
+
+
+# --- v2-7: dynamic probe proposal --------------------------------------------
+
+
+class TestExposureAgentDynamicProposal(unittest.TestCase):
+    def test_proposer_called_when_no_known_probe(self):
+        candidate = dict(_SAMPLE_CANDIDATE, cve_id="CVE-9999-9999")
+        proposer_calls: list[tuple[dict, dict]] = []
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            proposer_calls.append((cand, host))
+            return json.dumps({
+                "binary": "dpkg",
+                "args": ["-l", "libssl1.1"],
+                "rationale": "check libssl version",
+                "expected_signals": ["1.1.1"],
+            })
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "no probe executed"})
+
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(run_probes=True),
+            probe_proposer=fake_proposer,
+        )
+        verdict = _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
+
+        self.assertEqual(len(proposer_calls), 1)
+        self.assertEqual(proposer_calls[0][0]["cve_id"], "CVE-9999-9999")
+        self.assertEqual(verdict.proposed_probe, {
+            "binary": "dpkg",
+            "args": ["-l", "libssl1.1"],
+            "rationale": "check libssl version",
+            "expected_signals": ["1.1.1"],
+        })
+        self.assertEqual(verdict.probe_proposal_error, "")
+        # Confirm proposal is not executed
+        self.assertEqual(verdict.probe_command, "")
+
+    def test_proposer_not_called_when_known_probe_exists(self):
+        # CVE-2023-38408 is in KNOWN_PROBES
+        proposer_calls: list[dict] = []
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            proposer_calls.append(cand)
+            return json.dumps({"binary": "should_not_run", "args": []})
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "CONFIRMED", "reason": "ssh banner matches"})
+
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(run_probes=True),
+            probe_runner=_fake_probe_runner,
+            probe_proposer=fake_proposer,
+        )
+        verdict = _run(agent.analyze(_SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE))
+
+        self.assertEqual(len(proposer_calls), 0)
+        self.assertIsNone(verdict.proposed_probe)
+        self.assertEqual(verdict.probe_command, "ssh -V")
+
+    def test_proposer_not_called_when_run_probes_false(self):
+        candidate = dict(_SAMPLE_CANDIDATE, cve_id="CVE-9999-9999")
+        proposer_calls: list[dict] = []
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            proposer_calls.append(cand)
+            return json.dumps({"binary": "echo", "args": ["1"]})
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "no probes"})
+
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(run_probes=False),
+            probe_proposer=fake_proposer,
+        )
+        verdict = _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
+
+        self.assertEqual(len(proposer_calls), 0)
+        self.assertIsNone(verdict.proposed_probe)
+        self.assertEqual(verdict.probe_proposal_error, "")
+
+    def test_proposer_failure_sets_error_and_does_not_abort_batch(self):
+        candidates = [
+            dict(_SAMPLE_CANDIDATE, cve_id="CVE-FAIL"),
+            dict(_SAMPLE_CANDIDATE, cve_id="CVE-OK"),
+        ]
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            if cand.get("cve_id") == "CVE-FAIL":
+                raise RuntimeError("proposer connection reset")
+            return json.dumps({
+                "binary": "httpd",
+                "args": ["-v"],
+                "rationale": "check apache",
+                "expected_signals": [],
+            })
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "test"})
+
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(run_probes=True),
+            probe_proposer=fake_proposer,
+        )
+        verdicts = _run(agent.analyze_batch(candidates, _SAMPLE_HOST_STATE))
+
+        self.assertEqual(len(verdicts), 2)
+        v_fail = verdicts[0]
+        self.assertIsNone(v_fail.proposed_probe)
+        self.assertIn("proposer connection reset", v_fail.probe_proposal_error)
+
+        v_ok = verdicts[1]
+        self.assertIsNotNone(v_ok.proposed_probe)
+        self.assertEqual(v_ok.probe_proposal_error, "")
+
+    def test_proposer_invalid_output_sets_error(self):
+        candidate = dict(_SAMPLE_CANDIDATE, cve_id="CVE-9999-9999")
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            # Returns an invalid proposal (shell wrapper)
+            return json.dumps({"binary": "bash", "args": ["-c", "whoami"]})
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "test"})
+
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(run_probes=True),
+            probe_proposer=fake_proposer,
+        )
+        verdict = _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
+
+        self.assertIsNone(verdict.proposed_probe)
+        self.assertIn("is a shell wrapper", verdict.probe_proposal_error)
+
+
+class TestVerdictProposalRoundTrip(unittest.TestCase):
+    def test_verdict_roundtrip_with_proposal(self):
+        v = Verdict(
+            cve_id="CVE-9999-0001",
+            verdict=VerdictType.NO_EVIDENCE,
+            reason="pending human review of proposed probe",
+            evidence={"note": "evidence"},
+            proposed_probe={
+                "binary": "redis-cli",
+                "args": ["INFO"],
+                "rationale": "check version",
+                "expected_signals": ["redis_version"],
+            },
+            probe_proposal_error="",
+        )
+        d = v.to_dict()
+        restored = Verdict.from_dict(d)
+        self.assertEqual(restored.proposed_probe, v.proposed_probe)
+        self.assertEqual(restored.probe_proposal_error, "")
+        self.assertEqual(restored.cve_id, v.cve_id)
+        self.assertEqual(restored.verdict, v.verdict)
+
+    def test_verdict_roundtrip_with_proposal_error(self):
+        v = Verdict(
+            cve_id="CVE-9999-0002",
+            verdict=VerdictType.NO_EVIDENCE,
+            reason="proposal failed",
+            proposed_probe=None,
+            probe_proposal_error="binary 'bash' is a shell wrapper; refused",
+        )
+        d = v.to_dict()
+        restored = Verdict.from_dict(d)
+        self.assertIsNone(restored.proposed_probe)
+        self.assertEqual(restored.probe_proposal_error, "binary 'bash' is a shell wrapper; refused")
+
+    def test_verdict_roundtrip_backward_compat_missing_fields(self):
+        # Simulates loading older JSON that didn't have proposed_probe or probe_proposal_error
+        old_dict = {
+            "cve_id": "CVE-2023-38408",
+            "verdict": "CONFIRMED",
+            "reason": "older verdict",
+            "evidence": {},
+            "probe_command": "ssh -V",
+            "probe_output": "banner",
+            "timestamp": "2026-08-01T00:00:00+00:00",
+        }
+        restored = Verdict.from_dict(old_dict)
+        self.assertIsNone(restored.proposed_probe)
+        self.assertEqual(restored.probe_proposal_error, "")
 
 
 if __name__ == "__main__":

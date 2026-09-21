@@ -49,6 +49,14 @@ class TestParser(unittest.TestCase):
             parser.parse_args(["analyze", "--candidates", "x.json",
                                "--engine", "invalid"])
 
+    def test_propose_probes_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["analyze", "--candidates", "x.json"])
+        self.assertFalse(args.propose_probes)
+
+        args_with = parser.parse_args(["analyze", "--candidates", "x.json", "--propose-probes"])
+        self.assertTrue(args_with.propose_probes)
+
 
 class TestFakeEngineEndToEnd(unittest.TestCase):
     def test_fake_engine_writes_verdicts(self):
@@ -70,6 +78,21 @@ class TestFakeEngineEndToEnd(unittest.TestCase):
             self.assertEqual(len(payload["verdicts"]), 1)
             self.assertEqual(payload["verdicts"][0]["cve_id"], "CVE-2023-38408")
             self.assertEqual(payload["verdicts"][0]["verdict"], "CONFIRMED")
+
+    def test_fake_engine_with_propose_probes_flag(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            cands = td / "cands.json"
+            cands.write_text(json.dumps(_SAMPLE_CANDIDATES), encoding="utf-8")
+            out = td / "verdicts.json"
+
+            rc = main(["analyze",
+                       "--candidates", str(cands),
+                       "--output", str(out),
+                       "--engine", "fake",
+                       "--propose-probes"])
+            self.assertEqual(rc, 0)
+            self.assertTrue(out.exists())
 
     def test_missing_candidates_file_exits_nonzero(self):
         rc = main(["analyze",

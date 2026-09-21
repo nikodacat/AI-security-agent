@@ -19,6 +19,7 @@ from typing import Any, Awaitable, Callable, Protocol
 
 from .probes import ProbeTemplate, lookup_probe
 from .prompts import SYSTEM_PROMPT, build_verdict_prompt
+from .proposal import ProbeProposer, ProposalValidationError, parse_proposal
 from .verdicts import Verdict, VerdictType
 
 
@@ -72,10 +73,12 @@ class ExposureAgent:
         verdict_fn: VerdictFn,
         config: AgentConfig | None = None,
         probe_runner: ProbeRunner | None = None,
+        probe_proposer: ProbeProposer | None = None,
     ) -> None:
         self.verdict_fn = verdict_fn
         self.config = config or AgentConfig()
         self.probe_runner = probe_runner or _default_probe_runner(self.config)
+        self.probe_proposer = probe_proposer
 
     async def analyze(
         self,
@@ -96,8 +99,20 @@ class ExposureAgent:
         template = lookup_probe(cve_id) if self.config.run_probes else None
 
         probe_command, probe_output = ("", "")
+        proposed_probe: dict[str, Any] | None = None
+        probe_proposal_error: str = ""
+
         if template is not None:
             probe_command, probe_output = self.probe_runner(template)
+        elif self.probe_proposer is not None and self.config.run_probes:
+            try:
+                raw_proposal = await self.probe_proposer(candidate, host_state)
+                probe = parse_proposal(raw_proposal)
+                proposed_probe = probe.to_dict()
+            except ProposalValidationError as e:
+                probe_proposal_error = str(e)
+            except Exception as e:
+                probe_proposal_error = str(e) or type(e).__name__
 
         user_prompt = build_verdict_prompt(
             candidate,
@@ -117,6 +132,8 @@ class ExposureAgent:
             evidence=parsed.get("evidence", {}),
             probe_command=probe_command,
             probe_output=probe_output,
+            proposed_probe=proposed_probe,
+            probe_proposal_error=probe_proposal_error,
         )
 
     async def analyze_batch(

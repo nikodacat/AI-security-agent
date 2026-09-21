@@ -159,6 +159,24 @@ def _render_evidence(v: Verdict) -> str:
             f'<div class="muted" style="font-family:monospace; font-size:0.75rem; '
             f'margin-top:0.35rem;">$ {html.escape(v.probe_command)}</div>'
         )
+    # v2-7: surface LLM-proposed probes (not executed) so a reviewer can see
+    # what the analyzer would have wanted to run for CVEs with no KNOWN_PROBE.
+    if v.proposed_probe:
+        pp = v.proposed_probe
+        argv_display = " ".join(
+            [str(pp.get("binary", ""))] + [str(a) for a in pp.get("args", [])]
+        ).strip()
+        parts.append(
+            f'<div class="muted" style="font-family:monospace; font-size:0.75rem; '
+            f'margin-top:0.35rem; color:#fbbf24;">'
+            f'proposed (not executed): {html.escape(argv_display) or "—"}'
+            f'</div>'
+        )
+    if v.probe_proposal_error:
+        parts.append(
+            f'<div class="muted" style="font-size:0.75rem; margin-top:0.35rem; '
+            f'color:#f87171;">proposal rejected: {html.escape(v.probe_proposal_error)}</div>'
+        )
     if not parts:
         return '<span class="muted">—</span>'
     return "".join(parts)
