@@ -7,34 +7,65 @@
 # Any expected_verdict change here must ALSO be logged in the revision
 # log at the bottom of ground_truth.md (the audit-trail lives there).
 
-version: 2
-committed_at: 2026-08-10
-scoring_scope: v1-pipeline-surfaceable
+version: 3
+committed_at: 2026-09-21
+scoring_scope: v2-with-external-prober
 note: |
-  v2 rescope (see 2026-08-10 revision log in ground_truth.md).
-  This YAML scores what the current v1 pipeline can actually surface --
-  the intersection of {CISA KEV catalog} ∩ {dpkg-installed packages}
-  on each container. The larger 17-entry aspirational ground truth
-  (banner-detected Apache, non-dpkg log4j, source-built httpd, absent
-  SSH) is preserved in the markdown as documented v2 coverage targets
-  and is NOT scored by run_eval.py at this stage.
+  v2-6 widening (see 2026-09-21 revision log in ground_truth.md).
+  This YAML now scores the full 24-entry ground truth: the 7 v1-scored
+  KEV+dpkg CVEs (all MITIGATED_BY_CONFIG, measuring analyzer's patched-
+  package recognition) PLUS the 17 previously-aspirational entries that
+  v2's capabilities (external network-prober, banner-based probe library,
+  host-scanner dpkg substrate) can now surface.
 
-  Every v1-scored entry is a KEV+dpkg CVE where the installed package
-  version is POST-FIX, so the schema-correct verdict is
-  MITIGATED_BY_CONFIG (the "config" being the choice of patched
-  version). This measures the analyzer's ability to correctly
-  recognize a patched CVE, which is where the pipeline sits today.
+  Detection-basis column mirrors ground_truth.md:
+    - dpkg          : host-scanner package inventory
+    - banner        : analyzer probe library (httpd -v, INFO server, etc.)
+    - probe-fs      : filesystem-existence probe (find / -name log4j*.jar)
+    - network       : v2 network-prober external reachability check
+
+  SSH-not-installed entries use NO_EVIDENCE per the 2026-08-05 revision-
+  log decision -- "no ssh binary in PATH" is not positive absence proof;
+  a stronger dpkg + filesystem-negative probe would justify NOT_RUNNING.
+
+  Two aspirational-doc entries are intentionally NOT scored here:
+    - eval-db-exposed row 2 (unauth Redis exposure marker, no CVE ID)
+    - eval-cms-plugin row 7 (empty wp-content/plugins/, no CVE ID)
+  Both live in the markdown as scope notes, not scoreable rows.
 
 containers:
   eval-web-vuln:
-    - {cve_id: CVE-2014-0160, expected: MITIGATED_BY_CONFIG, software: openssl,     detection: dpkg, note: "libssl1.1 1.1.1n-0+deb10u6, Heartbleed fixed in 1.0.1g"}
-    - {cve_id: CVE-2014-6278, expected: MITIGATED_BY_CONFIG, software: bash,        detection: dpkg, note: "bash 5.0-4, Shellshock family fixed in bash 4.3 patchlevels"}
+    # v1-scored (unchanged)
+    - {cve_id: CVE-2014-0160, expected: MITIGATED_BY_CONFIG, software: openssl,     detection: dpkg,    note: "libssl1.1 1.1.1n-0+deb10u6, Heartbleed fixed in 1.0.1g"}
+    - {cve_id: CVE-2014-6278, expected: MITIGATED_BY_CONFIG, software: bash,        detection: dpkg,    note: "bash 5.0-4, Shellshock family fixed in bash 4.3 patchlevels"}
+    # v2-6 additions (from aspirational tier)
+    - {cve_id: CVE-2021-42013, expected: CONFIRMED,           software: httpd,      detection: banner,  note: "Apache 2.4.49 built from source; mod_cgid loaded; port 80 published + externally reachable per network-prober"}
+    - {cve_id: CVE-2021-41773, expected: CONFIRMED,           software: httpd,      detection: banner,  note: "Apache 2.4.49 (predecessor of 42013); same affected version + same conditions"}
+    - {cve_id: CVE-2022-0778,  expected: MITIGATED_BY_CONFIG, software: openssl,    detection: dpkg,    note: "libssl1.1 1.1.1n-0+deb10u6 is at the patched line (fix in 1.1.1n/3.0.2)"}
+    - {cve_id: CVE-2021-3711,  expected: MITIGATED_BY_CONFIG, software: openssl,    detection: dpkg,    note: "libssl1.1 1.1.1n is post-fix (fixed in 1.1.1l)"}
+    - {cve_id: CVE-2023-38408, expected: NO_EVIDENCE,         software: openssh,    detection: probe-fs, note: "no ssh binary in PATH; not positive absence proof (see 2026-08-05 revision log)"}
+    - {cve_id: CVE-2019-0211,  expected: MITIGATED_BY_CONFIG, software: httpd,      detection: banner,  note: "httpd 2.4.49 is post-fix (fixed in 2.4.39); also default event MPM, not prefork"}
 
   eval-db-exposed:
-    - {cve_id: CVE-2014-0160, expected: MITIGATED_BY_CONFIG, software: openssl,     detection: dpkg, note: "libssl1.1 1.1.1w-0+deb11u8, Heartbleed fixed in 1.0.1g"}
-    - {cve_id: CVE-2014-6278, expected: MITIGATED_BY_CONFIG, software: bash,        detection: dpkg, note: "bash 5.1-2+b3, Shellshock family fixed in bash 4.3 patchlevels"}
+    # v1-scored (unchanged)
+    - {cve_id: CVE-2014-0160, expected: MITIGATED_BY_CONFIG, software: openssl,     detection: dpkg,    note: "libssl1.1 1.1.1w-0+deb11u8, Heartbleed fixed in 1.0.1g"}
+    - {cve_id: CVE-2014-6278, expected: MITIGATED_BY_CONFIG, software: bash,        detection: dpkg,    note: "bash 5.1-2+b3, Shellshock family fixed in bash 4.3 patchlevels"}
+    # v2-6 additions (from aspirational tier; row 2 exposure-marker skipped -- no CVE ID)
+    - {cve_id: CVE-2022-0543,  expected: CONFIRMED,           software: redis,      detection: banner,  note: "redis 6.2.6 upstream image (no Debian patch); Lua EVAL accessible without auth; port 6379 open + banner confirmed by prober"}
+    - {cve_id: CVE-2022-0778,  expected: MITIGATED_BY_CONFIG, software: openssl,    detection: dpkg,    note: "libssl1.1 1.1.1n-0+deb11u1 at patched line"}
+    - {cve_id: CVE-2022-24735, expected: CONFIRMED,           software: redis,      detection: banner,  note: "redis 6.2.6 predates 6.2.7 fix; Lua sandbox escape reachable"}
+    - {cve_id: CVE-2022-24736, expected: CONFIRMED,           software: redis,      detection: banner,  note: "redis 6.2.6 predates 6.2.7 fix; Lua NULL-deref DoS reachable"}
+    - {cve_id: CVE-2023-38408, expected: NO_EVIDENCE,         software: openssh,    detection: probe-fs, note: "no ssh binary in PATH; not positive absence proof (see 2026-08-05 revision log)"}
 
   eval-cms-plugin:
-    - {cve_id: CVE-2014-0160, expected: MITIGATED_BY_CONFIG, software: openssl,     detection: dpkg, note: "libssl1.1 1.1.1d-0+deb10u6, Heartbleed fixed in 1.0.1g"}
-    - {cve_id: CVE-2014-6278, expected: MITIGATED_BY_CONFIG, software: bash,        detection: dpkg, note: "bash 5.0-4, Shellshock family fixed in bash 4.3 patchlevels"}
-    - {cve_id: CVE-2017-8291, expected: MITIGATED_BY_CONFIG, software: ghostscript, detection: dpkg, note: "ghostscript 9.27~dfsg-2+deb10u4, fix landed in 9.21"}
+    # v1-scored (unchanged)
+    - {cve_id: CVE-2014-0160, expected: MITIGATED_BY_CONFIG, software: openssl,     detection: dpkg,    note: "libssl1.1 1.1.1d-0+deb10u6, Heartbleed fixed in 1.0.1g"}
+    - {cve_id: CVE-2014-6278, expected: MITIGATED_BY_CONFIG, software: bash,        detection: dpkg,    note: "bash 5.0-4, Shellshock family fixed in bash 4.3 patchlevels"}
+    - {cve_id: CVE-2017-8291, expected: MITIGATED_BY_CONFIG, software: ghostscript, detection: dpkg,    note: "ghostscript 9.27~dfsg-2+deb10u4, fix landed in 9.21"}
+    # v2-6 additions (from aspirational tier; row 7 empty-plugin-dir skipped -- no CVE ID)
+    - {cve_id: CVE-2021-42013, expected: MITIGATED_BY_CONFIG, software: httpd,      detection: banner,  note: "Apache 2.4.38 (Debian pkg, NOT 2.4.49); outside affected range 2.4.49/50"}
+    - {cve_id: CVE-2021-40438, expected: MITIGATED_BY_CONFIG, software: httpd,      detection: banner,  note: "Apache 2.4.38 in affected range (fixed 2.4.49) BUT mod_proxy not loaded; not reachable"}
+    - {cve_id: CVE-2022-0778,  expected: CONFIRMED,           software: openssl,    detection: dpkg,    note: "libssl1.1 1.1.1d-0+deb10u6 predates 1.1.1n patched line; reachable via PHP openssl_* funcs"}
+    - {cve_id: CVE-2021-3711,  expected: CONFIRMED,           software: openssl,    detection: dpkg,    note: "libssl1.1 1.1.1d predates 1.1.1l fix; SM2 buffer overflow reachable via PHP openssl_*"}
+    - {cve_id: CVE-2021-44228, expected: NOT_RUNNING,         software: log4j,      detection: probe-fs, note: "PHP stack; no log4j.jar on filesystem (language-mismatch sanity check)"}
+    - {cve_id: CVE-2023-38408, expected: NO_EVIDENCE,         software: openssh,    detection: probe-fs, note: "no ssh binary in PATH; not positive absence proof (see 2026-08-05 revision log)"}
