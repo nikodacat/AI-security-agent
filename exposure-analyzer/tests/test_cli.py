@@ -91,5 +91,105 @@ class TestFakeEngineEndToEnd(unittest.TestCase):
             self.assertEqual(rc, 1)
 
 
+# --- v2: --network-state flag -------------------------------------------------
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_NETWORK_STATE_SCHEMA = _REPO_ROOT / "docs" / "schemas" / "network_state.schema.json"
+_VALID_OBSERVATIONS: list[dict] = [
+    {
+        "target": "eval-db-exposed",
+        "port": 6379,
+        "protocol": "tcp",
+        "reachable": True,
+        "banner": "Redis key-value store 6.2.6",
+        "service_guess": {"vendor": "Redis", "product": "Redis", "version": "6.2.6"},
+    },
+]
+
+
+class TestNetworkStateFlag(unittest.TestCase):
+    """v2-5: --network-state loads + schema-validates before hand-off to agent.
+
+    All these tests run under the fake engine so we don't need a live Claude
+    CLI. The fake engine ignores network_state, but the LOAD path is still
+    exercised — that's what we're pinning down here.
+    """
+
+    def _run_with_ns(self, td: Path, ns_content: str, extra_args: list[str] | None = None) -> int:
+        cands = td / "cands.json"
+        cands.write_text(json.dumps(_SAMPLE_CANDIDATES), encoding="utf-8")
+        ns = td / "network_state.json"
+        ns.write_text(ns_content, encoding="utf-8")
+        argv = [
+            "analyze",
+            "--candidates", str(cands),
+            "--output", str(td / "out.json"),
+            "--engine", "fake",
+            "--network-state", str(ns),
+            "--network-state-schema", str(_NETWORK_STATE_SCHEMA),
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return main(argv)
+
+    def test_missing_network_state_file_exits_1(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            cands = td / "cands.json"
+            cands.write_text(json.dumps(_SAMPLE_CANDIDATES), encoding="utf-8")
+            rc = main([
+                "analyze",
+                "--candidates", str(cands),
+                "--output", str(td / "out.json"),
+                "--engine", "fake",
+                "--network-state", str(td / "does-not-exist.json"),
+            ])
+            self.assertEqual(rc, 1)
+
+    def test_invalid_json_exits_1(self):
+        with tempfile.TemporaryDirectory() as td:
+            rc = self._run_with_ns(Path(td), ns_content="{not json")
+            self.assertEqual(rc, 1)
+
+    def test_non_list_exits_1(self):
+        with tempfile.TemporaryDirectory() as td:
+            rc = self._run_with_ns(Path(td), ns_content=json.dumps({"observations": []}))
+            self.assertEqual(rc, 1)
+
+    def test_schema_violation_exits_1(self):
+        """A record missing a required field must fail validation."""
+        bad = [{"target": "x", "port": 22, "protocol": "tcp"}]  # missing reachable
+        with tempfile.TemporaryDirectory() as td:
+            rc = self._run_with_ns(Path(td), ns_content=json.dumps(bad))
+            self.assertEqual(rc, 1)
+
+    def test_valid_input_produces_normal_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            rc = self._run_with_ns(Path(td), ns_content=json.dumps(_VALID_OBSERVATIONS))
+            self.assertEqual(rc, 0)
+            out = json.loads((Path(td) / "out.json").read_text(encoding="utf-8"))
+            # fake engine ignores network_state but still produces verdicts
+            self.assertEqual(len(out["verdicts"]), 1)
+
+    def test_missing_schema_file_still_loads_with_warning(self):
+        """Operator's schema path may not resolve from cwd; we warn but continue."""
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            cands = td / "cands.json"
+            cands.write_text(json.dumps(_SAMPLE_CANDIDATES), encoding="utf-8")
+            ns = td / "network_state.json"
+            ns.write_text(json.dumps(_VALID_OBSERVATIONS), encoding="utf-8")
+            rc = main([
+                "analyze",
+                "--candidates", str(cands),
+                "--output", str(td / "out.json"),
+                "--engine", "fake",
+                "--network-state", str(ns),
+                "--network-state-schema", str(td / "no-such-schema.json"),
+            ])
+            self.assertEqual(rc, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

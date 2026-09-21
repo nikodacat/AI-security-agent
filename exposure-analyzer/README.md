@@ -45,6 +45,28 @@ python -m exposure_analyzer analyze \
     --output ./reports/verdicts.json
 ```
 
+### v2: external-attacker view
+
+Pass `--network-state` to include a JSON produced by `network-prober` (see
+`../network-prober/`). The file is schema-validated on load against
+`../docs/schemas/network_state.schema.json`; the analyzer prompt then
+includes an "External-attacker view" section per candidate, filtered to
+observations whose banner/service matches the CVE's product/vendor.
+
+```bash
+python -m exposure_analyzer analyze \
+    --candidates ../cve-matcher/reports/candidates.json \
+    --host-state ../host-scanner/reports/host_state.json \
+    --network-state /prober-output/network_state.json \
+    --output ./reports/verdicts_v2.json \
+    --engine claude
+```
+
+Omitting `--network-state` gives the v1 baseline — same code path, no
+External-attacker section in the prompt. Running once with and once
+without produces the v2 verdict-delta measurement (see roadmap chunk
+`v2-13`).
+
 ## Development notes
 
 - Package is called `exposure_analyzer` (underscored), folder is `exposure-analyzer/` (hyphenated).

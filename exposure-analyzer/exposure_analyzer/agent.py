@@ -81,8 +81,17 @@ class ExposureAgent:
         self,
         candidate: dict[str, Any],
         host_state: dict[str, Any],
+        network_state: list[dict[str, Any]] | None = None,
     ) -> Verdict:
-        """Produce a verdict for a single CVE candidate."""
+        """Produce a verdict for a single CVE candidate.
+
+        ``network_state`` (v2 addition): list of PortObservation dicts from
+        network-prober conforming to docs/schemas/network_state.schema.json.
+        None (default) preserves v1 behavior — the prompt omits the
+        External-attacker view entirely, so v1-vs-v2 verdict-delta baselines
+        are directly comparable by just running the analyzer twice with and
+        without the argument.
+        """
         cve_id = candidate.get("cve_id", "CVE-UNKNOWN")
         template = lookup_probe(cve_id) if self.config.run_probes else None
 
@@ -95,6 +104,7 @@ class ExposureAgent:
             host_state,
             probe_command=probe_command,
             probe_output=probe_output,
+            network_state=network_state,
         )
 
         raw = await self.verdict_fn(SYSTEM_PROMPT, user_prompt)
@@ -113,11 +123,19 @@ class ExposureAgent:
         self,
         candidates: list[dict[str, Any]],
         host_state: dict[str, Any],
+        network_state: list[dict[str, Any]] | None = None,
     ) -> list[Verdict]:
-        """Analyze many candidates serially (subscription rate limits)."""
+        """Analyze many candidates serially (subscription rate limits).
+
+        ``network_state`` is passed through unchanged to every candidate's
+        :meth:`analyze` call — the filtering to "observations relevant to
+        this CVE" happens inside :func:`prompts.build_verdict_prompt`.
+        """
         results: list[Verdict] = []
         for cand in candidates:
-            results.append(await self.analyze(cand, host_state))
+            results.append(
+                await self.analyze(cand, host_state, network_state=network_state)
+            )
         return results
 
 

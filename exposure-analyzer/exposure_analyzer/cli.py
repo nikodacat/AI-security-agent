@@ -61,6 +61,16 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Run probes inside a docker container via `docker exec` "
                                 "instead of on the local machine. Use for eval-lab runs "
                                 "(e.g. --target-container=eval-web-vuln).")
+    p_analyze.add_argument("--network-state", type=Path, default=None,
+                           help="v2 external-attacker input: path to a network_state.json "
+                                "produced by network-prober. Schema-validated on load. "
+                                "Omit to run in v1 mode (no external leg) — this is what "
+                                "the v2 delta baseline uses.")
+    p_analyze.add_argument("--network-state-schema", type=Path,
+                           default=Path("docs/schemas/network_state.schema.json"),
+                           help="Schema used to validate --network-state input. Override "
+                                "when running from a directory where the default relative "
+                                "path doesn't resolve.")
     # --batch removed in chunk F (2026-08-10): was a no-op wired to
     # AgentConfig.interactive, which the analyzer never actually consumed.
     # See ROADMAP.md chunk F for the design decision.
@@ -92,6 +102,13 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             return 1
         host_state = json.loads(args.host_state.read_text(encoding="utf-8"))
 
+    network_state: list[dict[str, Any]] | None = None
+    if args.network_state is not None:
+        rc = _load_network_state(args)
+        if isinstance(rc, int):
+            return rc
+        network_state = rc
+
     if args.engine == "fake":
         verdicts = [_fake_verdict(f) for f in kev_findings]
         engine_label = "fake (cve-matcher passthrough, no AI)"
@@ -111,11 +128,15 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             probe_runner=probe_runner,
         )
         try:
-            verdicts = asyncio.run(agent.analyze_batch(kev_findings, host_state))
+            verdicts = asyncio.run(
+                agent.analyze_batch(kev_findings, host_state, network_state=network_state)
+            )
         except Exception as e:
             print(f"error: analyzer failed: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
         engine_label = "claude (via claude-agent-sdk)"
+        if network_state is not None:
+            engine_label += f" + network_state ({len(network_state)} obs)"
 
     output_path: Path = args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,6 +153,63 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         print(f"  appended Verdicts section to {args.report}")
 
     return 0
+
+
+def _load_network_state(args: argparse.Namespace) -> list[dict[str, Any]] | int:
+    """Read and schema-validate ``--network-state`` input.
+
+    Returns the observations list on success, or a CLI exit code on failure.
+    Validation is best-effort: if the schema file is missing (e.g. the user
+    is running from a directory where the default relative path doesn't
+    resolve) we still load the JSON but log a warning — better to run
+    unvalidated than to hard-fail when the operator has valid data.
+    """
+    ns_path: Path = args.network_state
+    if not ns_path.exists():
+        print(f"error: network-state file not found: {ns_path}", file=sys.stderr)
+        return 1
+    try:
+        observations = json.loads(ns_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        print(f"error: network-state is not valid JSON: {e}", file=sys.stderr)
+        return 1
+    if not isinstance(observations, list):
+        print(
+            "error: network-state must be a JSON array of PortObservation records; "
+            f"got {type(observations).__name__}",
+            file=sys.stderr,
+        )
+        return 1
+
+    schema_path: Path = args.network_state_schema
+    if schema_path.exists():
+        try:
+            from jsonschema import Draft202012Validator
+        except ImportError:
+            print(
+                "warning: jsonschema not installed; skipping network-state validation. "
+                "Install with `pip install jsonschema` for stricter loading.",
+                file=sys.stderr,
+            )
+        else:
+            try:
+                schema = json.loads(schema_path.read_text(encoding="utf-8"))
+                Draft202012Validator(schema).validate(observations)
+            except Exception as e:
+                print(
+                    f"error: network-state failed schema validation: "
+                    f"{type(e).__name__}: {e}",
+                    file=sys.stderr,
+                )
+                return 1
+    else:
+        print(
+            f"warning: schema not found at {schema_path}; loading network-state "
+            "without validation. Pass --network-state-schema to override the path.",
+            file=sys.stderr,
+        )
+
+    return observations
 
 
 def _fake_verdict(finding: dict) -> Verdict:

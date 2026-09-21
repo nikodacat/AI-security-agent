@@ -131,5 +131,65 @@ class TestExposureAgentBatch(unittest.TestCase):
         self.assertEqual(calls, ["Candidate: CVE-A", "Candidate: CVE-B", "Candidate: CVE-C"])
 
 
+# --- v2: network_state passthrough -------------------------------------------
+
+
+class TestExposureAgentNetworkState(unittest.TestCase):
+    """The agent's job is to pass network_state through to the prompt, not to
+    interpret it. These tests pin down that plumbing so v2-5's per-CVE prompt
+    filtering can be tuned in isolation later."""
+
+    _OBS = [
+        {
+            "target": "eval-web-vuln",
+            "port": 22,
+            "protocol": "tcp",
+            "reachable": True,
+            "banner": "OpenSSH 8.5p1 Ubuntu-1ubuntu1",
+            "service_guess": {"vendor": "OpenSSH", "product": "OpenSSH", "version": "8.5p1"},
+        },
+    ]
+
+    def test_analyze_omits_external_section_by_default(self):
+        seen: dict = {}
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            seen["prompt"] = user_prompt
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "..."})
+
+        agent = ExposureAgent(verdict_fn=fake_llm, config=AgentConfig(run_probes=False))
+        _run(agent.analyze(_SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE))
+        self.assertNotIn("External-attacker view", seen["prompt"])
+
+    def test_analyze_includes_external_section_when_provided(self):
+        seen: dict = {}
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            seen["prompt"] = user_prompt
+            return json.dumps({"verdict": "CONFIRMED", "reason": "reachable"})
+
+        agent = ExposureAgent(verdict_fn=fake_llm, config=AgentConfig(run_probes=False))
+        _run(agent.analyze(_SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE, network_state=self._OBS))
+        self.assertIn("External-attacker view", seen["prompt"])
+        self.assertIn("OpenSSH 8.5p1", seen["prompt"])
+
+    def test_analyze_batch_forwards_network_state_to_each_call(self):
+        prompts_seen: list[str] = []
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            prompts_seen.append(user_prompt)
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "..."})
+
+        agent = ExposureAgent(verdict_fn=fake_llm, config=AgentConfig(run_probes=False))
+        candidates = [
+            dict(_SAMPLE_CANDIDATE, cve_id="CVE-A"),
+            dict(_SAMPLE_CANDIDATE, cve_id="CVE-B"),
+        ]
+        _run(agent.analyze_batch(candidates, _SAMPLE_HOST_STATE, network_state=self._OBS))
+        self.assertEqual(len(prompts_seen), 2)
+        for p in prompts_seen:
+            self.assertIn("External-attacker view", p)
+
+
 if __name__ == "__main__":
     unittest.main()

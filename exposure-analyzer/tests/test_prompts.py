@@ -93,5 +93,104 @@ class TestPromptSizeDefense(unittest.TestCase):
         self.assertIn("truncated", prompt)
 
 
+# --- v2: network_state integration -------------------------------------------
+
+
+_SSH_OBSERVATION = {
+    "target": "eval-web-vuln",
+    "port": 22,
+    "protocol": "tcp",
+    "reachable": True,
+    "banner": "OpenSSH 8.5p1 Ubuntu-1ubuntu1",
+    "service_guess": {"vendor": "OpenSSH", "product": "OpenSSH", "version": "8.5p1"},
+}
+_REDIS_OBSERVATION = {
+    "target": "eval-db-exposed",
+    "port": 6379,
+    "protocol": "tcp",
+    "reachable": True,
+    "banner": "Redis key-value store 6.2.6",
+    "service_guess": {"vendor": "Redis", "product": "Redis", "version": "6.2.6"},
+}
+_CLOSED_OBSERVATION = {
+    "target": "eval-web-vuln",
+    "port": 443,
+    "protocol": "tcp",
+    "reachable": False,
+}
+
+
+class TestNetworkStateAbsent(unittest.TestCase):
+    """v1 baseline behavior — no network_state, no external-attacker section."""
+
+    def test_none_omits_section_entirely(self):
+        prompt = build_verdict_prompt(_SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE, network_state=None)
+        self.assertNotIn("External-attacker view", prompt)
+
+    def test_default_is_none(self):
+        """Backward compat: existing callers pass 3 or 4 positional args and
+        must keep working without opting into v2."""
+        prompt_v1 = build_verdict_prompt(_SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE)
+        self.assertNotIn("External-attacker view", prompt_v1)
+
+
+class TestNetworkStatePresent(unittest.TestCase):
+    def test_matching_observation_shown(self):
+        prompt = build_verdict_prompt(
+            _SAMPLE_CANDIDATE,  # kev_product=OpenSSH, package_name=openssh-server
+            _SAMPLE_HOST_STATE,
+            network_state=[_SSH_OBSERVATION, _REDIS_OBSERVATION],
+        )
+        self.assertIn("External-attacker view", prompt)
+        self.assertIn("OpenSSH", prompt)
+        # Redis is not this CVE's service; filter should exclude it
+        self.assertNotIn("Redis key-value store", prompt)
+
+    def test_no_token_match_falls_back_to_reachable_ports(self):
+        """If nothing service-matches, we still surface reachable observations
+        so the model can note them (better than empty context)."""
+        redis_cve = dict(_SAMPLE_CANDIDATE)
+        redis_cve.update({
+            "cve_id": "CVE-2022-0543",
+            "kev_product": "Redis",
+            "kev_vendor": "Redis",
+            "package_name": "redis-server",
+        })
+        prompt = build_verdict_prompt(
+            redis_cve, _SAMPLE_HOST_STATE,
+            network_state=[_SSH_OBSERVATION, _REDIS_OBSERVATION, _CLOSED_OBSERVATION],
+        )
+        self.assertIn("Redis key-value store", prompt)
+        # Closed port has no banner — the fallback filter still keeps it out
+        self.assertNotIn('"port": 443', prompt)
+
+    def test_empty_list_shown_as_no_observations(self):
+        prompt = build_verdict_prompt(
+            _SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE, network_state=[]
+        )
+        self.assertIn("External-attacker view", prompt)
+        self.assertIn("no observations", prompt)
+
+    def test_shown_count_hint_when_filter_dropped_observations(self):
+        prompt = build_verdict_prompt(
+            _SAMPLE_CANDIDATE, _SAMPLE_HOST_STATE,
+            network_state=[_SSH_OBSERVATION, _REDIS_OBSERVATION],
+        )
+        # Filter kept 1 of 2 — the preamble should say so
+        self.assertIn("1 of 2", prompt)
+
+
+class TestSystemPromptExternalAttackerRule(unittest.TestCase):
+    def test_system_prompt_describes_network_state_rule(self):
+        # Must mention the section name the user prompt uses, so the model
+        # can connect the two.
+        self.assertIn("network_state", SYSTEM_PROMPT)
+        self.assertIn("External-attacker", SYSTEM_PROMPT)
+
+    def test_system_prompt_still_forbids_exploitation(self):
+        """v2 additions must not weaken the defender-only stance."""
+        self.assertIn("Never propose exploitation", SYSTEM_PROMPT)
+
+
 if __name__ == "__main__":
     unittest.main()
