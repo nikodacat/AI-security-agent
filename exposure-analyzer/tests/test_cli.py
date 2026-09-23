@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from exposure_analyzer.cli import build_parser, main
+from exposure_analyzer.hitl import DEFAULT_LEARNED_PROBES_PATH
 
 
 _SAMPLE_CANDIDATES = {
@@ -57,6 +58,30 @@ class TestParser(unittest.TestCase):
         args_with = parser.parse_args(["analyze", "--candidates", "x.json", "--propose-probes"])
         self.assertTrue(args_with.propose_probes)
 
+    def test_hitl_flags_defaults(self):
+        parser = build_parser()
+        args = parser.parse_args(["analyze", "--candidates", "x.json"])
+        self.assertFalse(args.auto_approve_known)
+        self.assertFalse(args.auto_approve_all_unsafe)
+        self.assertEqual(args.learned_probes_path, DEFAULT_LEARNED_PROBES_PATH)
+        self.assertFalse(args.no_learn)
+
+    def test_hitl_flags_parsing(self):
+        parser = build_parser()
+        custom_path = Path("custom/path/learned_probes.jsonl")
+        args = parser.parse_args([
+            "analyze",
+            "--candidates", "x.json",
+            "--auto-approve-known",
+            "--auto-approve-all-unsafe",
+            "--learned-probes-path", str(custom_path),
+            "--no-learn",
+        ])
+        self.assertTrue(args.auto_approve_known)
+        self.assertTrue(args.auto_approve_all_unsafe)
+        self.assertEqual(args.learned_probes_path, custom_path)
+        self.assertTrue(args.no_learn)
+
 
 class TestFakeEngineEndToEnd(unittest.TestCase):
     def test_fake_engine_writes_verdicts(self):
@@ -91,6 +116,28 @@ class TestFakeEngineEndToEnd(unittest.TestCase):
                        "--output", str(out),
                        "--engine", "fake",
                        "--propose-probes"])
+            self.assertEqual(rc, 0)
+            self.assertTrue(out.exists())
+
+    def test_fake_engine_with_hitl_flags(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            cands = td / "cands.json"
+            cands.write_text(json.dumps(_SAMPLE_CANDIDATES), encoding="utf-8")
+            out = td / "verdicts.json"
+            learned_path = td / "learned.jsonl"
+
+            rc = main([
+                "analyze",
+                "--candidates", str(cands),
+                "--output", str(out),
+                "--engine", "fake",
+                "--propose-probes",
+                "--auto-approve-known",
+                "--auto-approve-all-unsafe",
+                "--learned-probes-path", str(learned_path),
+                "--no-learn",
+            ])
             self.assertEqual(rc, 0)
             self.assertTrue(out.exists())
 

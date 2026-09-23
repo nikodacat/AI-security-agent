@@ -15,8 +15,17 @@ import re
 import shlex
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Protocol
 
+from .hitl import (
+    ApprovalGate,
+    Decision,
+    append_learned_probe,
+    argv_hash,
+    build_probe_argv,
+    make_learned_record,
+)
 from .probes import ProbeTemplate, lookup_probe
 from .prompts import SYSTEM_PROMPT, build_verdict_prompt
 from .proposal import ProbeProposer, ProposalValidationError, parse_proposal
@@ -74,11 +83,17 @@ class ExposureAgent:
         config: AgentConfig | None = None,
         probe_runner: ProbeRunner | None = None,
         probe_proposer: ProbeProposer | None = None,
+        approval_gate: ApprovalGate | None = None,
+        learned_probes_path: Path | None = None,
+        target_container: str | None = None,
     ) -> None:
         self.verdict_fn = verdict_fn
         self.config = config or AgentConfig()
         self.probe_runner = probe_runner or _default_probe_runner(self.config)
         self.probe_proposer = probe_proposer
+        self.approval_gate = approval_gate
+        self.learned_probes_path = learned_probes_path
+        self.target_container = target_container
 
     async def analyze(
         self,
@@ -109,6 +124,22 @@ class ExposureAgent:
                 raw_proposal = await self.probe_proposer(candidate, host_state)
                 probe = parse_proposal(raw_proposal)
                 proposed_probe = probe.to_dict()
+                if self.approval_gate is not None:
+                    decision, approved_by = self.approval_gate.decide(probe, cve_id)
+                    if decision == Decision.APPROVE:
+                        argv = build_probe_argv(probe, self.target_container)
+                        display_cmd = " ".join([probe.binary, *probe.args])
+                        probe_command, probe_output = _run_argv(
+                            argv, display_cmd=display_cmd, config=self.config
+                        )
+                        h = argv_hash(probe.binary, probe.args)
+                        if (
+                            self.learned_probes_path is not None
+                            and h not in self.approval_gate.learned
+                        ):
+                            rec = make_learned_record(probe, cve_id, approved_by)
+                            append_learned_probe(self.learned_probes_path, rec)
+                            self.approval_gate.learned[h] = rec
             except ProposalValidationError as e:
                 probe_proposal_error = str(e)
             except Exception as e:

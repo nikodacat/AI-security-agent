@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from exposure_analyzer.agent import (
     AgentConfig,
     ExposureAgent,
     _parse_verdict_response,
 )
+from exposure_analyzer.hitl import ApprovalGate, Decision, load_learned_probes
 from exposure_analyzer.probes import ProbeTemplate
 from exposure_analyzer.verdicts import Verdict, VerdictType
 
@@ -380,6 +384,147 @@ class TestVerdictProposalRoundTrip(unittest.TestCase):
         restored = Verdict.from_dict(old_dict)
         self.assertIsNone(restored.proposed_probe)
         self.assertEqual(restored.probe_proposal_error, "")
+
+
+class TestExposureAgentHITL(unittest.TestCase):
+    _SAMPLE_PROPOSAL = json.dumps(
+        {
+            "binary": "python",
+            "args": ["--version"],
+            "rationale": "check python version",
+            "expected_signals": ["Python"],
+        }
+    )
+
+    def test_approved_proposal_executes(self):
+        candidate = dict(_SAMPLE_CANDIDATE, cve_id="CVE-NO-PROBE-1")
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            return self._SAMPLE_PROPOSAL
+
+        seen: dict[str, str] = {}
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            seen["user_prompt"] = user_prompt
+            return json.dumps({"verdict": "CONFIRMED", "reason": "probe ran"})
+
+        gate = ApprovalGate(auto_approve_all_unsafe=True, interactive=False)
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(),
+            probe_proposer=fake_proposer,
+            approval_gate=gate,
+        )
+        verdict = _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
+
+        self.assertEqual(verdict.cve_id, "CVE-NO-PROBE-1")
+        self.assertEqual(verdict.probe_command, "python --version")
+        self.assertIn("Python", verdict.probe_output)
+        self.assertIsNotNone(verdict.proposed_probe)
+        self.assertEqual(verdict.proposed_probe["binary"], "python")
+        self.assertEqual(verdict.proposed_probe["args"], ["--version"])
+        self.assertEqual(verdict.probe_proposal_error, "")
+        self.assertIn("python --version", seen["user_prompt"])
+
+    def test_denied_proposal_leaves_probe_empty(self):
+        candidate = dict(_SAMPLE_CANDIDATE, cve_id="CVE-NO-PROBE-2")
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            return self._SAMPLE_PROPOSAL
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "probe denied"})
+
+        gate = ApprovalGate(interactive=False)
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(),
+            probe_proposer=fake_proposer,
+            approval_gate=gate,
+        )
+        verdict = _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
+
+        self.assertEqual(verdict.cve_id, "CVE-NO-PROBE-2")
+        self.assertEqual(verdict.probe_command, "")
+        self.assertEqual(verdict.probe_output, "")
+        self.assertIsNotNone(verdict.proposed_probe)
+        self.assertEqual(verdict.probe_proposal_error, "")
+
+    def test_jsonl_append_behavior_and_idempotency(self):
+        candidate = dict(_SAMPLE_CANDIDATE, cve_id="CVE-NO-PROBE-3")
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            return self._SAMPLE_PROPOSAL
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "CONFIRMED", "reason": "ok"})
+
+        with tempfile.TemporaryDirectory() as td:
+            jsonl_path = Path(td) / "learned_probes.jsonl"
+            gate = ApprovalGate(auto_approve_all_unsafe=True, interactive=False)
+            agent = ExposureAgent(
+                verdict_fn=fake_llm,
+                config=AgentConfig(),
+                probe_proposer=fake_proposer,
+                approval_gate=gate,
+                learned_probes_path=jsonl_path,
+            )
+
+            # First run: appends to JSONL
+            verdict1 = _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
+            self.assertEqual(verdict1.probe_command, "python --version")
+            self.assertTrue(jsonl_path.exists())
+            records = load_learned_probes(jsonl_path)
+            self.assertEqual(len(records), 1)
+
+            # Second run with same agent: idempotency check ensures no double append
+            _run(agent.analyze(candidate, _SAMPLE_HOST_STATE))
+            lines = jsonl_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 1)
+
+            # Run with learned_probes_path=None (--no-learn): does not append
+            gate2 = ApprovalGate(auto_approve_all_unsafe=True, interactive=False)
+            agent_no_learn = ExposureAgent(
+                verdict_fn=fake_llm,
+                config=AgentConfig(),
+                probe_proposer=fake_proposer,
+                approval_gate=gate2,
+                learned_probes_path=None,
+            )
+            _run(agent_no_learn.analyze(candidate, _SAMPLE_HOST_STATE))
+            self.assertEqual(len(gate2.learned), 0)
+            lines_after = jsonl_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines_after), 1)
+
+    def test_skip_all_denies_subsequent_proposals_in_batch(self):
+        candidates = [
+            dict(_SAMPLE_CANDIDATE, cve_id="CVE-NO-PROBE-4"),
+            dict(_SAMPLE_CANDIDATE, cve_id="CVE-NO-PROBE-5"),
+        ]
+
+        async def fake_proposer(cand: dict, host: dict) -> str:
+            return self._SAMPLE_PROPOSAL
+
+        async def fake_llm(system_prompt: str, user_prompt: str) -> str:
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "denied"})
+
+        gate = ApprovalGate(interactive=True)
+        agent = ExposureAgent(
+            verdict_fn=fake_llm,
+            config=AgentConfig(),
+            probe_proposer=fake_proposer,
+            approval_gate=gate,
+        )
+
+        with patch("builtins.input", return_value="skip-all") as mock_input:
+            verdicts = _run(agent.analyze_batch(candidates, _SAMPLE_HOST_STATE))
+
+        self.assertEqual(len(verdicts), 2)
+        self.assertEqual(verdicts[0].probe_command, "")
+        self.assertEqual(verdicts[1].probe_command, "")
+        self.assertIsNotNone(verdicts[0].proposed_probe)
+        self.assertIsNotNone(verdicts[1].proposed_probe)
+        mock_input.assert_called_once()
 
 
 if __name__ == "__main__":

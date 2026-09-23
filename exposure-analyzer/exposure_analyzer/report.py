@@ -159,19 +159,29 @@ def _render_evidence(v: Verdict) -> str:
             f'<div class="muted" style="font-family:monospace; font-size:0.75rem; '
             f'margin-top:0.35rem;">$ {html.escape(v.probe_command)}</div>'
         )
-    # v2-7: surface LLM-proposed probes (not executed) so a reviewer can see
-    # what the analyzer would have wanted to run for CVEs with no KNOWN_PROBE.
+    # v2-7/v2-8: surface LLM-proposed probes. When probe_command is set the
+    # proposal was approved (HITL or auto-approve) and executed; the argv is
+    # already shown above via probe_command, so we only add a small "(LLM-
+    # proposed, operator-approved)" attribution line. When probe_command is
+    # empty the proposal was not executed — show the argv with a "not executed"
+    # label so a reviewer sees what the analyzer would have wanted to run.
     if v.proposed_probe:
         pp = v.proposed_probe
         argv_display = " ".join(
             [str(pp.get("binary", ""))] + [str(a) for a in pp.get("args", [])]
         ).strip()
-        parts.append(
-            f'<div class="muted" style="font-family:monospace; font-size:0.75rem; '
-            f'margin-top:0.35rem; color:#fbbf24;">'
-            f'proposed (not executed): {html.escape(argv_display) or "—"}'
-            f'</div>'
-        )
+        if v.probe_command:
+            parts.append(
+                f'<div class="muted" style="font-size:0.7rem; margin-top:0.15rem; '
+                f'color:#94a3b8;">↑ LLM-proposed probe, operator-approved</div>'
+            )
+        else:
+            parts.append(
+                f'<div class="muted" style="font-family:monospace; font-size:0.75rem; '
+                f'margin-top:0.35rem; color:#fbbf24;">'
+                f'proposed (not executed): {html.escape(argv_display) or "—"}'
+                f'</div>'
+            )
     if v.probe_proposal_error:
         parts.append(
             f'<div class="muted" style="font-size:0.75rem; margin-top:0.35rem; '

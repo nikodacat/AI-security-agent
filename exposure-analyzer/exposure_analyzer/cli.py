@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from . import __version__
+from . import __version__, hitl
 from .agent import (
     AgentConfig,
     ExposureAgent,
@@ -75,6 +75,17 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Schema used to validate --network-state input. Override "
                                 "when running from a directory where the default relative "
                                 "path doesn't resolve.")
+    p_analyze.add_argument("--auto-approve-known", action="store_true", default=False,
+                           help="Auto-approves proposals whose argv_hash matches a "
+                                "learned_probes.jsonl entry.")
+    p_analyze.add_argument("--auto-approve-all-unsafe", action="store_true", default=False,
+                           help="Bypasses HITL entirely.")
+    p_analyze.add_argument("--learned-probes-path", type=Path,
+                           default=hitl.DEFAULT_LEARNED_PROBES_PATH,
+                           help="Override the sidecar location. "
+                                f"Default: {hitl.DEFAULT_LEARNED_PROBES_PATH}")
+    p_analyze.add_argument("--no-learn", action="store_true", default=False,
+                           help="Don't append newly-approved probes to the JSONL.")
     # --batch removed in chunk F (2026-08-10): was a no-op wired to
     # AgentConfig.interactive, which the analyzer never actually consumed.
     # See ROADMAP.md chunk F for the design decision.
@@ -127,17 +138,30 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         if args.target_container:
             probe_runner = docker_exec_probe_runner(args.target_container, agent_cfg)
         probe_proposer = None
+        approval_gate = None
+        learned_probes_path = None
         if args.propose_probes:
             try:
                 probe_proposer = build_claude_proposer_fn()
             except RuntimeError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 1
+            learned = hitl.load_learned_probes(args.learned_probes_path)
+            approval_gate = hitl.ApprovalGate(
+                learned=learned,
+                auto_approve_known=args.auto_approve_known,
+                auto_approve_all_unsafe=args.auto_approve_all_unsafe,
+                interactive=hitl.stdin_is_tty(),
+            )
+            learned_probes_path = None if args.no_learn else args.learned_probes_path
         agent = ExposureAgent(
             verdict_fn=verdict_fn,
             config=agent_cfg,
             probe_runner=probe_runner,
             probe_proposer=probe_proposer,
+            approval_gate=approval_gate,
+            learned_probes_path=learned_probes_path,
+            target_container=args.target_container,
         )
         try:
             verdicts = asyncio.run(
@@ -149,6 +173,14 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         engine_label = "claude (via claude-agent-sdk)"
         if args.propose_probes:
             engine_label += " + probe-proposer"
+            if args.auto_approve_all_unsafe:
+                engine_label += " + AUTO-APPROVE-ALL-UNSAFE"
+            elif args.auto_approve_known:
+                engine_label += f" + auto-approve-known({len(learned)})"
+            elif hitl.stdin_is_tty():
+                engine_label += " + HITL(interactive)"
+            else:
+                engine_label += " + HITL(non-TTY default-deny)"
         if network_state is not None:
             engine_label += f" + network_state ({len(network_state)} obs)"
 

@@ -169,6 +169,33 @@ class TestProposedProbeRendering(unittest.TestCase):
             self.assertIn("proposal rejected", html)
             self.assertIn("shell wrapper", html)
 
+    def test_executed_proposal_shows_attribution_not_not_executed_label(self):
+        # v2-8: when probe_command is set the proposal was approved + executed;
+        # the "proposed (not executed)" label would be misleading. Report should
+        # show the argv once (via probe_command) and a small attribution.
+        verdicts = [Verdict(
+            cve_id="CVE-9999-9996",
+            verdict=VerdictType.CONFIRMED,
+            reason="approved proposal ran",
+            evidence={},
+            probe_command="dpkg -l libssl1.1",
+            probe_output="ii  libssl1.1 1.1.1n",
+            proposed_probe={
+                "binary": "dpkg",
+                "args": ["-l", "libssl1.1"],
+                "rationale": "check pkg",
+                "expected_signals": [],
+            },
+        )]
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            report = self._write_report(td)
+            append_verdicts_to_report(verdicts, report)
+            html = report.read_text(encoding="utf-8")
+            self.assertIn("$ dpkg -l libssl1.1", html)
+            self.assertIn("LLM-proposed probe, operator-approved", html)
+            self.assertNotIn("not executed", html)
+
     def test_proposal_html_special_chars_escaped(self):
         verdicts = [Verdict(
             cve_id="CVE-9999-9997",
