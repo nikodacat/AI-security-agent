@@ -72,7 +72,7 @@ def test_main_end_to_end_writes_valid_output(
         }
     }
 
-    def fake_scan_targets(targets, top_ports=100, timeout=60, _scanner_factory=None):
+    def fake_scan_targets(targets, top_ports=100, timeout=60, ports=None, _scanner_factory=None):
         return canned
 
     # Patch the symbol *at its import site inside cli*, not at the source module,

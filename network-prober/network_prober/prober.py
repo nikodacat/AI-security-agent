@@ -30,24 +30,38 @@ class ProberResult(dict):
     """
 
 
-def _build_arguments(top_ports: int, timeout: int) -> str:
+def _build_arguments(top_ports: int, timeout: int, ports: str | None = None) -> str:
     """Compose the ``arguments=`` string handed to python-nmap.
 
     - ``-sV``           : service/version detection (populates product/version)
-    - ``--top-ports N`` : scan the N most common TCP ports
+    - ``-p`` or ``--top-ports N`` : explicit port list wins if provided;
+                          otherwise scan the N most common TCP ports
     - ``-Pn``           : skip host discovery (containers on evallab often
                           don't reply to pings, and we're on a controlled
                           network anyway)
     - ``--host-timeout``: cap per-target wall time, so one dead target
                           can't hang a multi-target run.
     """
-    return f"-sV --top-ports {int(top_ports)} -Pn --host-timeout {int(timeout)}s"
+    if ports:
+        # Explicit port list -- validate to nmap's -p accepted chars only.
+        # Allow digits, commas, dashes; refuse shell metachars to prevent
+        # argument injection into python-nmap's shell-out.
+        if any(c not in "0123456789,-" for c in ports):
+            raise ValueError(
+                f"--ports contains illegal characters: {ports!r} "
+                "(only digits, commas, and dashes allowed)"
+            )
+        port_arg = f"-p {ports}"
+    else:
+        port_arg = f"--top-ports {int(top_ports)}"
+    return f"-sV {port_arg} -Pn --host-timeout {int(timeout)}s"
 
 
 def scan_targets(
     targets: list[str],
     top_ports: int = 100,
     timeout: int = 60,
+    ports: str | None = None,
     _scanner_factory: Any = None,
 ) -> dict:
     """Scan each target once; return ``{target: {tcp, udp, error}}``.
@@ -72,7 +86,7 @@ def scan_targets(
         # In tests, the fake raises RuntimeError; treat any exception as scan failure.
         scanner_error = Exception
 
-    args = _build_arguments(top_ports=top_ports, timeout=timeout)
+    args = _build_arguments(top_ports=top_ports, timeout=timeout, ports=ports)
     per_target: dict[str, dict] = {}
 
     for target in targets:
@@ -83,7 +97,14 @@ def scan_targets(
             per_target[target] = {"tcp": {}, "udp": {}, "error": str(e)}
             continue
 
-        if target not in scanner.all_hosts():
+        # nmap's all_hosts() returns the RESOLVED IP, not the hostname we
+        # scanned by. First real-lab run against eval-web-vuln surfaced this:
+        # target='eval-web-vuln' but all_hosts()=['172.20.0.2'], causing every
+        # successful scan to be misreported as "unreachable". Use the first
+        # host in the result set as the actual key (single-host scans only
+        # ever have one entry).
+        hosts = scanner.all_hosts()
+        if not hosts:
             per_target[target] = {
                 "tcp": {},
                 "udp": {},
@@ -91,7 +112,8 @@ def scan_targets(
             }
             continue
 
-        host_data = scanner[target]
+        host_key = hosts[0]
+        host_data = scanner[host_key]
         per_target[target] = {
             "tcp": {int(p): dict(host_data["tcp"][p]) for p in host_data.get("tcp", {})},
             "udp": {int(p): dict(host_data["udp"][p]) for p in host_data.get("udp", {})},

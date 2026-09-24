@@ -14,7 +14,13 @@ RUN pip install --no-cache-dir \
       python-nmap \
       pyyaml \
       rich \
-      httpx
+      httpx \
+      jsonschema
+
+# Make network-prober importable without callers setting PYTHONPATH themselves.
+# /repo is the read-only bind-mount of the AI-security-agent repo root (see
+# docker-compose.yml). This lets `python -m network_prober` work as-is.
+ENV PYTHONPATH=/repo/network-prober
 
 WORKDIR /opt/coordinator
 

@@ -49,7 +49,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--top-ports",
         type=int,
         default=100,
-        help="number of top-ranked TCP ports to scan (nmap --top-ports)",
+        help="number of top-ranked TCP ports to scan (nmap --top-ports). Ignored when --ports is set.",
+    )
+    p_scan.add_argument(
+        "--ports",
+        type=str,
+        default=None,
+        help=(
+            "explicit port list/range to scan (nmap -p syntax, e.g. '80,443,6379,8000-8100'). "
+            "Overrides --top-ports. Real-world targets often have services on ports outside nmap's "
+            "top-N ranking (e.g. Redis on 6379 is not in top-1000) -- use --ports when you know "
+            "what to look for."
+        ),
     )
     p_scan.add_argument(
         "--timeout",
@@ -88,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             args.targets,
             top_ports=args.top_ports,
             timeout=args.timeout,
+            ports=args.ports,
         )
     except ProberDependencyError as e:
         sys.stderr.write(f"network-prober: {e}\n")
