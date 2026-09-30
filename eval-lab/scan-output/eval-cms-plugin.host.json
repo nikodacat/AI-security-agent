@@ -1,0 +1,1947 @@
+{
+  "schema_version": 1,
+  "source": "eval-lab/scan_target.py",
+  "system": {
+    "hostname": "cms-plugin",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-debian-10.10",
+    "python": "3.7.3 (default, Mar 23 2024, 16:12:05) \n[GCC 8.3.0]",
+    "scan_time": "2026-09-24T12:41:32.591283"
+  },
+  "scanners": {
+    "system": {
+      "status": "completed",
+      "platform": "linux",
+      "os_info": {
+        "WindowsProductName": "Debian GNU/Linux 10 (buster)",
+        "WindowsVersion": "10",
+        "OsArchitecture": "x86_64",
+        "WindowsBuildLabEx": "6.6.87.2-microsoft-standard-WSL2",
+        "OsLastBootUpTime": "2026-09-24 12:13:29",
+        "CsName": "cms-plugin",
+        "CsDNSHostName": "cms-plugin",
+        "distro_id": "debian",
+        "distro_id_like": "",
+        "kernel_version": "6.6.87.2-microsoft-standard-WSL2"
+      },
+      "hotfixes": {
+        "recent_patches": [],
+        "count": 0,
+        "pending_upgrades": [],
+        "pending_count": 0
+      },
+      "windows_update": {
+        "AutoUpdateEnabled": false,
+        "AUOptions": "manual",
+        "WUServer": "apt",
+        "service_active": "unknown",
+        "service_enabled": "unknown",
+        "has_unattended_config": false
+      },
+      "uac": {
+        "EnableLUA": true,
+        "ConsentPromptBehaviorAdmin": "password_required",
+        "ConsentPromptBehaviorUser": "password_required",
+        "PromptOnSecureDesktop": false,
+        "sudoers_has_nopasswd": false,
+        "sudoers_drop_in_files": []
+      },
+      "defender": {
+        "AntivirusEnabled": false,
+        "RealTimeProtectionEnabled": false,
+        "AntispywareEnabled": false,
+        "BehaviorMonitorEnabled": false,
+        "IoavProtectionEnabled": false,
+        "OnAccessProtectionEnabled": false,
+        "AntivirusSignatureLastUpdated": "",
+        "AntispywareSignatureLastUpdated": "",
+        "NISEnabled": false,
+        "apparmor_active": "",
+        "apparmor_enabled": "",
+        "clamav_active": ""
+      },
+      "audit_policy": "auditd not installed",
+      "smb_settings": {
+        "EnableSMB1Protocol": false,
+        "EnableSMB2Protocol": true,
+        "RequireSecuritySignature": false,
+        "EnableSecuritySignature": false,
+        "samba_installed": false
+      },
+      "rdp": {
+        "RDPEnabled": false,
+        "NLARequired": false,
+        "ssh_service_active": "unknown",
+        "permit_root_login": "no",
+        "password_auth_disabled": false
+      },
+      "auto_play": {
+        "not_applicable": true
+      },
+      "sshd_config": {
+        "present": false
+      },
+      "firewall": {
+        "tool": "none",
+        "active": false
+      },
+      "fail2ban": {
+        "installed": false
+      },
+      "selinux": {
+        "installed": false
+      },
+      "scan_duration_s": 0.12
+    },
+    "software": {
+      "status": "completed",
+      "platform": "linux",
+      "engine": "kev",
+      "installed_count": 234,
+      "installed_apps": [
+        {
+          "DisplayName": "adduser",
+          "DisplayVersion": "3.118",
+          "Publisher": "Debian Adduser Developers <adduser@packages.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "apache2",
+          "DisplayVersion": "2.4.38-3+deb10u4",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "apache2-bin",
+          "DisplayVersion": "2.4.38-3+deb10u4",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "apache2-data",
+          "DisplayVersion": "2.4.38-3+deb10u4",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "apache2-utils",
+          "DisplayVersion": "2.4.38-3+deb10u4",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "apt",
+          "DisplayVersion": "1.8.2.3",
+          "Publisher": "APT Development Team <deity@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "autoconf",
+          "DisplayVersion": "2.69-11",
+          "Publisher": "Ben Pfaff <pfaffben@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "base-files",
+          "DisplayVersion": "10.3+deb10u10",
+          "Publisher": "Santiago Vila <sanvila@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "base-passwd",
+          "DisplayVersion": "3.5.46",
+          "Publisher": "Colin Watson <cjwatson@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "bash",
+          "DisplayVersion": "5.0-4",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "binutils",
+          "DisplayVersion": "2.31.1-16",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "binutils-common",
+          "DisplayVersion": "2.31.1-16",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "binutils-x86-64-linux-gnu",
+          "DisplayVersion": "2.31.1-16",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "bsdutils",
+          "DisplayVersion": "1:2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "bzip2",
+          "DisplayVersion": "1.0.6-9.2~deb10u1",
+          "Publisher": "Anibal Monsalve Salazar <anibal@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "ca-certificates",
+          "DisplayVersion": "20200601~deb10u2",
+          "Publisher": "Julien Cristau <jcristau@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "coreutils",
+          "DisplayVersion": "8.30-3",
+          "Publisher": "Michael Stone <mstone@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "cpp",
+          "DisplayVersion": "4:8.3.0-1",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "cpp-8",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "curl",
+          "DisplayVersion": "7.64.0-4+deb10u2",
+          "Publisher": "Alessandro Ghedini <ghedo@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "dash",
+          "DisplayVersion": "0.5.10.2-5",
+          "Publisher": "Andrej Shadura <andrewsh@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "debconf",
+          "DisplayVersion": "1.5.71",
+          "Publisher": "Debconf Developers <debconf-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "debian-archive-keyring",
+          "DisplayVersion": "2019.1+deb10u1",
+          "Publisher": "Debian Release Team <packages@release.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "debianutils",
+          "DisplayVersion": "4.8.6.1",
+          "Publisher": "Clint Adams <clint@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "diffutils",
+          "DisplayVersion": "1:3.7-3",
+          "Publisher": "Santiago Vila <sanvila@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "dpkg",
+          "DisplayVersion": "1.19.7",
+          "Publisher": "Dpkg Developers <debian-dpkg@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "dpkg-dev",
+          "DisplayVersion": "1.19.7",
+          "Publisher": "Dpkg Developers <debian-dpkg@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "e2fsprogs",
+          "DisplayVersion": "1.44.5-1+deb10u3",
+          "Publisher": "Theodore Y. Ts'o <tytso@mit.edu>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "fdisk",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "file",
+          "DisplayVersion": "1:5.35-4+deb10u2",
+          "Publisher": "Christoph Biedl <debian.axhn@manchmal.in-ulm.de>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "findutils",
+          "DisplayVersion": "4.6.0+git+20190209-2",
+          "Publisher": "Andreas Metzler <ametzler@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "fontconfig-config",
+          "DisplayVersion": "2.13.1-2",
+          "Publisher": "Debian freedesktop.org maintainers <pkg-freedesktop-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "fonts-dejavu-core",
+          "DisplayVersion": "2.37-1",
+          "Publisher": "Debian Fonts Task Force <pkg-fonts-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "g++",
+          "DisplayVersion": "4:8.3.0-1",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "g++-8",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "gcc",
+          "DisplayVersion": "4:8.3.0-1",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "gcc-8",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "gcc-8-base",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "ghostscript",
+          "DisplayVersion": "9.27~dfsg-2+deb10u4",
+          "Publisher": "Debian Printing Team <debian-printing@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "gpgv",
+          "DisplayVersion": "2.2.12-1+deb10u1",
+          "Publisher": "Debian GnuPG Maintainers <pkg-gnupg-maint@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "grep",
+          "DisplayVersion": "3.3-1",
+          "Publisher": "Anibal Monsalve Salazar <anibal@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "gzip",
+          "DisplayVersion": "1.9-3",
+          "Publisher": "Bdale Garbee <bdale@gag.com>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "hostname",
+          "DisplayVersion": "3.21",
+          "Publisher": "Michael Meskes <meskes@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "imagemagick-6-common",
+          "DisplayVersion": "8:6.9.10.23+dfsg-2.1+deb10u1",
+          "Publisher": "ImageMagick Packaging Team <pkg-gmagick-im-team@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "init-system-helpers",
+          "DisplayVersion": "1.56+nmu1",
+          "Publisher": "Debian systemd Maintainers <pkg-systemd-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libacl1",
+          "DisplayVersion": "2.2.53-4",
+          "Publisher": "Guillem Jover <guillem@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libapr1",
+          "DisplayVersion": "1.6.5-1+b1",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libaprutil1",
+          "DisplayVersion": "1.6.1-4",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libaprutil1-dbd-sqlite3",
+          "DisplayVersion": "1.6.1-4",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libaprutil1-ldap",
+          "DisplayVersion": "1.6.1-4",
+          "Publisher": "Debian Apache Maintainers <debian-apache@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libapt-pkg5.0",
+          "DisplayVersion": "1.8.2.3",
+          "Publisher": "APT Development Team <deity@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libargon2-1",
+          "DisplayVersion": "0~20171227-0.2",
+          "Publisher": "Luca Bruno <lucab@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libasan5",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libatomic1",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libattr1",
+          "DisplayVersion": "1:2.4.48-4",
+          "Publisher": "Guillem Jover <guillem@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libaudit-common",
+          "DisplayVersion": "1:2.8.4-3",
+          "Publisher": "Laurent Bigonville <bigon@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libaudit1",
+          "DisplayVersion": "1:2.8.4-3",
+          "Publisher": "Laurent Bigonville <bigon@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libavahi-client3",
+          "DisplayVersion": "0.7-4+deb10u1",
+          "Publisher": "Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libavahi-common-data",
+          "DisplayVersion": "0.7-4+deb10u1",
+          "Publisher": "Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libavahi-common3",
+          "DisplayVersion": "0.7-4+deb10u1",
+          "Publisher": "Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libbinutils",
+          "DisplayVersion": "2.31.1-16",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libblkid1",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libbrotli1",
+          "DisplayVersion": "1.0.7-2+deb10u1",
+          "Publisher": "Tomasz Buchert <tomasz@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libbsd0",
+          "DisplayVersion": "0.9.1-2+deb10u1",
+          "Publisher": "Guillem Jover <guillem@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libbz2-1.0",
+          "DisplayVersion": "1.0.6-9.2~deb10u1",
+          "Publisher": "Anibal Monsalve Salazar <anibal@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libc-bin",
+          "DisplayVersion": "2.28-10",
+          "Publisher": "GNU Libc Maintainers <debian-glibc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libc-dev-bin",
+          "DisplayVersion": "2.28-10",
+          "Publisher": "GNU Libc Maintainers <debian-glibc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libc6",
+          "DisplayVersion": "2.28-10",
+          "Publisher": "GNU Libc Maintainers <debian-glibc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libc6-dev",
+          "DisplayVersion": "2.28-10",
+          "Publisher": "GNU Libc Maintainers <debian-glibc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libcap-ng0",
+          "DisplayVersion": "0.7.9-2",
+          "Publisher": "Pierre Chifflier <pollux@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libcc1-0",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libcom-err2",
+          "DisplayVersion": "1.44.5-1+deb10u3",
+          "Publisher": "Theodore Y. Ts'o <tytso@mit.edu>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libcups2",
+          "DisplayVersion": "2.2.10-6+deb10u4",
+          "Publisher": "Debian Printing Team <debian-printing@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libcupsimage2",
+          "DisplayVersion": "2.2.10-6+deb10u4",
+          "Publisher": "Debian Printing Team <debian-printing@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libcurl4",
+          "DisplayVersion": "7.64.0-4+deb10u2",
+          "Publisher": "Alessandro Ghedini <ghedo@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libdb5.3",
+          "DisplayVersion": "5.3.28+dfsg1-0.5",
+          "Publisher": "Debian Berkeley DB Team <team+bdb@tracker.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libdbus-1-3",
+          "DisplayVersion": "1.12.20-0+deb10u1",
+          "Publisher": "Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libde265-0",
+          "DisplayVersion": "1.0.3-1+b1",
+          "Publisher": "Debian Multimedia Maintainers <debian-multimedia@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libdebconfclient0",
+          "DisplayVersion": "0.249",
+          "Publisher": "Debian Install System Team <debian-boot@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libdpkg-perl",
+          "DisplayVersion": "1.19.7",
+          "Publisher": "Dpkg Developers <debian-dpkg@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libedit2",
+          "DisplayVersion": "3.1-20181209-1",
+          "Publisher": "LLVM Packaging Team <pkg-llvm-team@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libexpat1",
+          "DisplayVersion": "2.2.6-2+deb10u1",
+          "Publisher": "Laszlo Boszormenyi (GCS) <gcs@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libext2fs2",
+          "DisplayVersion": "1.44.5-1+deb10u3",
+          "Publisher": "Theodore Y. Ts'o <tytso@mit.edu>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libfdisk1",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libffi6",
+          "DisplayVersion": "3.2.1-9",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libfftw3-double3",
+          "DisplayVersion": "3.3.8-2",
+          "Publisher": "Debian Science Team <debian-science-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libfontconfig1",
+          "DisplayVersion": "2.13.1-2",
+          "Publisher": "Debian freedesktop.org maintainers <pkg-freedesktop-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libfreetype6",
+          "DisplayVersion": "2.9.1-3+deb10u2",
+          "Publisher": "Hugh McMaster <hugh.mcmaster@outlook.com>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgcc-8-dev",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgcc1",
+          "DisplayVersion": "1:8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgcrypt20",
+          "DisplayVersion": "1.8.4-5+deb10u1",
+          "Publisher": "Debian GnuTLS Maintainers <pkg-gnutls-maint@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgdbm-compat4",
+          "DisplayVersion": "1.18.1-4",
+          "Publisher": "Dmitry Bogatov <KAction@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgdbm6",
+          "DisplayVersion": "1.18.1-4",
+          "Publisher": "Dmitry Bogatov <KAction@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libglib2.0-0",
+          "DisplayVersion": "2.58.3-2+deb10u3",
+          "Publisher": "Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgmp10",
+          "DisplayVersion": "2:6.1.2+dfsg-4",
+          "Publisher": "Debian Science Team <debian-science-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgnutls30",
+          "DisplayVersion": "3.6.7-4+deb10u7",
+          "Publisher": "Debian GnuTLS Maintainers <pkg-gnutls-maint@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgomp1",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgpg-error0",
+          "DisplayVersion": "1.35-1",
+          "Publisher": "Debian GnuPG Maintainers <pkg-gnupg-maint@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgs9",
+          "DisplayVersion": "9.27~dfsg-2+deb10u4",
+          "Publisher": "Debian Printing Team <debian-printing@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgs9-common",
+          "DisplayVersion": "9.27~dfsg-2+deb10u4",
+          "Publisher": "Debian Printing Team <debian-printing@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libgssapi-krb5-2",
+          "DisplayVersion": "1.17-3+deb10u1",
+          "Publisher": "Sam Hartman <hartmans@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libheif1",
+          "DisplayVersion": "1.3.2-2~deb10u1",
+          "Publisher": "Debian Multimedia Maintainers <debian-multimedia@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libhogweed4",
+          "DisplayVersion": "3.4.1-1+deb10u1",
+          "Publisher": "Magnus Holmgren <holmgren@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libicu63",
+          "DisplayVersion": "63.1-6+deb10u1",
+          "Publisher": "Laszlo Boszormenyi (GCS) <gcs@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libidn11",
+          "DisplayVersion": "1.33-2.2",
+          "Publisher": "Debian Libidn Team <help-libidn@gnu.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libidn2-0",
+          "DisplayVersion": "2.0.5-1+deb10u1",
+          "Publisher": "Debian Libidn team <help-libidn@gnu.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libijs-0.35",
+          "DisplayVersion": "0.35-14",
+          "Publisher": "Debian Printing Team <debian-printing@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libisl19",
+          "DisplayVersion": "0.20-2",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libitm1",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libjansson4",
+          "DisplayVersion": "2.12-1",
+          "Publisher": "Alessandro Ghedini <ghedo@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libjbig0",
+          "DisplayVersion": "2.1-3.1+b2",
+          "Publisher": "Michael van der Kolff <mvanderkolff@gmail.com>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libjbig2dec0",
+          "DisplayVersion": "0.16-1",
+          "Publisher": "Debian Printing Team <debian-printing@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libjpeg62-turbo",
+          "DisplayVersion": "1:1.5.2-2+deb10u1",
+          "Publisher": "Ond\u0159ej Sur\u00fd <ondrej@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libk5crypto3",
+          "DisplayVersion": "1.17-3+deb10u1",
+          "Publisher": "Sam Hartman <hartmans@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libkeyutils1",
+          "DisplayVersion": "1.6-6",
+          "Publisher": "Christian Kastner <ckk@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libkrb5-3",
+          "DisplayVersion": "1.17-3+deb10u1",
+          "Publisher": "Sam Hartman <hartmans@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libkrb5support0",
+          "DisplayVersion": "1.17-3+deb10u1",
+          "Publisher": "Sam Hartman <hartmans@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "liblcms2-2",
+          "DisplayVersion": "2.9-3",
+          "Publisher": "Thomas Weber <tweber@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libldap-2.4-2",
+          "DisplayVersion": "2.4.47+dfsg-3+deb10u6",
+          "Publisher": "Debian OpenLDAP Maintainers <pkg-openldap-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libldap-common",
+          "DisplayVersion": "2.4.47+dfsg-3+deb10u6",
+          "Publisher": "Debian OpenLDAP Maintainers <pkg-openldap-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "liblqr-1-0",
+          "DisplayVersion": "0.4.2-2.1",
+          "Publisher": "Bernd Zeimetz <bzed@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "liblsan0",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libltdl7",
+          "DisplayVersion": "2.4.6-9",
+          "Publisher": "Alastair McKinstry <mckinstry@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "liblua5.2-0",
+          "DisplayVersion": "5.2.4-1.1+b2",
+          "Publisher": "Enrico Tassi <gareuselesinge@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "liblz4-1",
+          "DisplayVersion": "1.8.3-1+deb10u1",
+          "Publisher": "Nobuhiro Iwamatsu <iwamatsu@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "liblzma5",
+          "DisplayVersion": "5.2.4-1",
+          "Publisher": "Jonathan Nieder <jrnieder@gmail.com>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmagic-mgc",
+          "DisplayVersion": "1:5.35-4+deb10u2",
+          "Publisher": "Christoph Biedl <debian.axhn@manchmal.in-ulm.de>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmagic1",
+          "DisplayVersion": "1:5.35-4+deb10u2",
+          "Publisher": "Christoph Biedl <debian.axhn@manchmal.in-ulm.de>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmagickcore-6.q16-6",
+          "DisplayVersion": "8:6.9.10.23+dfsg-2.1+deb10u1",
+          "Publisher": "ImageMagick Packaging Team <pkg-gmagick-im-team@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmagickwand-6.q16-6",
+          "DisplayVersion": "8:6.9.10.23+dfsg-2.1+deb10u1",
+          "Publisher": "ImageMagick Packaging Team <pkg-gmagick-im-team@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmount1",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmpc3",
+          "DisplayVersion": "1.1.0-1",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmpdec2",
+          "DisplayVersion": "2.4.2-2",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmpfr6",
+          "DisplayVersion": "4.0.2-1",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libmpx2",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libncurses6",
+          "DisplayVersion": "6.1+20181013-2+deb10u2",
+          "Publisher": "Craig Small <csmall@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libncursesw6",
+          "DisplayVersion": "6.1+20181013-2+deb10u2",
+          "Publisher": "Craig Small <csmall@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libnettle6",
+          "DisplayVersion": "3.4.1-1+deb10u1",
+          "Publisher": "Magnus Holmgren <holmgren@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libnghttp2-14",
+          "DisplayVersion": "1.36.0-2+deb10u1",
+          "Publisher": "Tomasz Buchert <tomasz@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libnuma1",
+          "DisplayVersion": "2.0.12-1",
+          "Publisher": "Ian Wienand <ianw@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libonig5",
+          "DisplayVersion": "6.9.1-1",
+          "Publisher": "J\u00f6rg Frings-F\u00fcrst <debian@jff.email>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libopenjp2-7",
+          "DisplayVersion": "2.3.0-2+deb10u2",
+          "Publisher": "Debian PhotoTools Maintainers <pkg-phototools-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libp11-kit0",
+          "DisplayVersion": "0.23.15-2+deb10u1",
+          "Publisher": "Debian GnuTLS Maintainers <pkg-gnutls-maint@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpam-modules",
+          "DisplayVersion": "1.3.1-5",
+          "Publisher": "Steve Langasek <vorlon@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpam-modules-bin",
+          "DisplayVersion": "1.3.1-5",
+          "Publisher": "Steve Langasek <vorlon@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpam-runtime",
+          "DisplayVersion": "1.3.1-5",
+          "Publisher": "Steve Langasek <vorlon@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpam0g",
+          "DisplayVersion": "1.3.1-5",
+          "Publisher": "Steve Langasek <vorlon@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpaper1",
+          "DisplayVersion": "1.1.28",
+          "Publisher": "Giuseppe Sacco <eppesuig@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpcre3",
+          "DisplayVersion": "2:8.39-12",
+          "Publisher": "Matthew Vernon <matthew@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libperl5.28",
+          "DisplayVersion": "5.28.1-6+deb10u1",
+          "Publisher": "Niko Tyni <ntyni@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpng16-16",
+          "DisplayVersion": "1.6.36-6",
+          "Publisher": "Maintainers of libpng1.6 packages <libpng1.6@packages.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libprocps7",
+          "DisplayVersion": "2:3.3.15-2",
+          "Publisher": "Craig Small <csmall@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpsl5",
+          "DisplayVersion": "0.20.2-2",
+          "Publisher": "Tim R\u00fchsen <tim.ruehsen@gmx.de>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpython3-stdlib",
+          "DisplayVersion": "3.7.3-1",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpython3.7-minimal",
+          "DisplayVersion": "3.7.3-2+deb10u7",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libpython3.7-stdlib",
+          "DisplayVersion": "3.7.3-2+deb10u7",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libquadmath0",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libreadline7",
+          "DisplayVersion": "7.0-5",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "librtmp1",
+          "DisplayVersion": "2.4+20151223.gitfa8646d.1-2",
+          "Publisher": "Debian Multimedia Maintainers <debian-multimedia@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsasl2-2",
+          "DisplayVersion": "2.1.27+dfsg-1+deb10u1",
+          "Publisher": "Debian Cyrus Team <team+cyrus@tracker.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsasl2-modules-db",
+          "DisplayVersion": "2.1.27+dfsg-1+deb10u1",
+          "Publisher": "Debian Cyrus Team <team+cyrus@tracker.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libseccomp2",
+          "DisplayVersion": "2.3.3-4",
+          "Publisher": "Kees Cook <kees@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libselinux1",
+          "DisplayVersion": "2.8-1+b1",
+          "Publisher": "Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsemanage-common",
+          "DisplayVersion": "2.8-2",
+          "Publisher": "Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsemanage1",
+          "DisplayVersion": "2.8-2",
+          "Publisher": "Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsepol1",
+          "DisplayVersion": "2.8-1",
+          "Publisher": "Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsigsegv2",
+          "DisplayVersion": "2.12-2",
+          "Publisher": "Debian Common Lisp Team <debian-common-lisp@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsmartcols1",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsodium23",
+          "DisplayVersion": "1.0.17-1",
+          "Publisher": "Laszlo Boszormenyi (GCS) <gcs@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsqlite3-0",
+          "DisplayVersion": "3.27.2-3+deb10u1",
+          "Publisher": "Laszlo Boszormenyi (GCS) <gcs@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libss2",
+          "DisplayVersion": "1.44.5-1+deb10u3",
+          "Publisher": "Theodore Y. Ts'o <tytso@mit.edu>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libssh2-1",
+          "DisplayVersion": "1.8.0-2.1",
+          "Publisher": "Mikhail Gusarov <dottedmag@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libssl1.1",
+          "DisplayVersion": "1.1.1d-0+deb10u6",
+          "Publisher": "Debian OpenSSL Team <pkg-openssl-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libstdc++-8-dev",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libstdc++6",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libsystemd0",
+          "DisplayVersion": "241-7~deb10u7",
+          "Publisher": "Debian systemd Maintainers <pkg-systemd-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libtasn1-6",
+          "DisplayVersion": "4.13-3",
+          "Publisher": "Debian GnuTLS Maintainers <pkg-gnutls-maint@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libtiff5",
+          "DisplayVersion": "4.1.0+git191117-2~deb10u2",
+          "Publisher": "Laszlo Boszormenyi (GCS) <gcs@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libtinfo6",
+          "DisplayVersion": "6.1+20181013-2+deb10u2",
+          "Publisher": "Craig Small <csmall@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libtsan0",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libubsan1",
+          "DisplayVersion": "8.3.0-6",
+          "Publisher": "Debian GCC Maintainers <debian-gcc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libudev1",
+          "DisplayVersion": "241-7~deb10u7",
+          "Publisher": "Debian systemd Maintainers <pkg-systemd-maintainers@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libunistring2",
+          "DisplayVersion": "0.9.10-1",
+          "Publisher": "J\u00f6rg Frings-F\u00fcrst <debian@jff.email>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libuuid1",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libwebp6",
+          "DisplayVersion": "0.6.1-2+deb10u1",
+          "Publisher": "Jeff Breidenbach <jab@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libwebpmux3",
+          "DisplayVersion": "0.6.1-2+deb10u1",
+          "Publisher": "Jeff Breidenbach <jab@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libx11-6",
+          "DisplayVersion": "2:1.6.7-1+deb10u2",
+          "Publisher": "Debian X Strike Force <debian-x@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libx11-data",
+          "DisplayVersion": "2:1.6.7-1+deb10u2",
+          "Publisher": "Debian X Strike Force <debian-x@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libx265-165",
+          "DisplayVersion": "2.9-4",
+          "Publisher": "Debian Multimedia Maintainers <debian-multimedia@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libxau6",
+          "DisplayVersion": "1:1.0.8-1+b2",
+          "Publisher": "Debian X Strike Force <debian-x@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libxcb1",
+          "DisplayVersion": "1.13.1-2",
+          "Publisher": "Debian X Strike Force <debian-x@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libxdmcp6",
+          "DisplayVersion": "1:1.1.2-3",
+          "Publisher": "Debian X Strike Force <debian-x@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libxext6",
+          "DisplayVersion": "2:1.3.3-1+b2",
+          "Publisher": "Debian X Strike Force <debian-x@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libxml2",
+          "DisplayVersion": "2.9.4+dfsg1-7+deb10u2",
+          "Publisher": "Debian XML/SGML Group <debian-xml-sgml-pkgs@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libzip4",
+          "DisplayVersion": "1.5.1-4",
+          "Publisher": "Stefan Sch\u00f6rghofer <amd1212@4md.gr>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "libzstd1",
+          "DisplayVersion": "1.3.8+dfsg-3+deb10u2",
+          "Publisher": "Debian Med Packaging Team <debian-med-packaging@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "linux-libc-dev",
+          "DisplayVersion": "4.19.194-1",
+          "Publisher": "Debian Kernel Team <debian-kernel@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "login",
+          "DisplayVersion": "1:4.5-1.1",
+          "Publisher": "Shadow package maintainers <pkg-shadow-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "lsb-base",
+          "DisplayVersion": "10.2019051400",
+          "Publisher": "Debian LSB Team <debian-lsb@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "m4",
+          "DisplayVersion": "1.4.18-2",
+          "Publisher": "Santiago Vila <sanvila@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "make",
+          "DisplayVersion": "4.2.1-1.2",
+          "Publisher": "Manoj Srivastava <srivasta@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "mawk",
+          "DisplayVersion": "1.3.3-17+b3",
+          "Publisher": "Steve Langasek <vorlon@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "mime-support",
+          "DisplayVersion": "3.62",
+          "Publisher": "Mime-Support Packagers <team+debian-mimesupport-packagers@tracker.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "mount",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "ncurses-base",
+          "DisplayVersion": "6.1+20181013-2+deb10u2",
+          "Publisher": "Craig Small <csmall@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "ncurses-bin",
+          "DisplayVersion": "6.1+20181013-2+deb10u2",
+          "Publisher": "Craig Small <csmall@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "openssl",
+          "DisplayVersion": "1.1.1d-0+deb10u6",
+          "Publisher": "Debian OpenSSL Team <pkg-openssl-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "passwd",
+          "DisplayVersion": "1:4.5-1.1",
+          "Publisher": "Shadow package maintainers <pkg-shadow-devel@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "patch",
+          "DisplayVersion": "2.7.6-3+deb10u1",
+          "Publisher": "Laszlo Boszormenyi (GCS) <gcs@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "perl",
+          "DisplayVersion": "5.28.1-6+deb10u1",
+          "Publisher": "Niko Tyni <ntyni@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "perl-base",
+          "DisplayVersion": "5.28.1-6+deb10u1",
+          "Publisher": "Niko Tyni <ntyni@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "perl-modules-5.28",
+          "DisplayVersion": "5.28.1-6+deb10u1",
+          "Publisher": "Niko Tyni <ntyni@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "pkg-config",
+          "DisplayVersion": "0.29-6",
+          "Publisher": "Tollef Fog Heen <tfheen@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "poppler-data",
+          "DisplayVersion": "0.4.9-2",
+          "Publisher": "Hideki Yamane <henrich@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "procps",
+          "DisplayVersion": "2:3.3.15-2",
+          "Publisher": "Craig Small <csmall@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python-pip-whl",
+          "DisplayVersion": "18.1-5",
+          "Publisher": "Debian Python Modules Team <python-modules-team@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python3",
+          "DisplayVersion": "3.7.3-1",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python3-distutils",
+          "DisplayVersion": "3.7.3-1",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python3-lib2to3",
+          "DisplayVersion": "3.7.3-1",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python3-minimal",
+          "DisplayVersion": "3.7.3-1",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python3-pip",
+          "DisplayVersion": "18.1-5",
+          "Publisher": "Debian Python Modules Team <python-modules-team@lists.alioth.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python3.7",
+          "DisplayVersion": "3.7.3-2+deb10u7",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "python3.7-minimal",
+          "DisplayVersion": "3.7.3-2+deb10u7",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "re2c",
+          "DisplayVersion": "1.1.1-1",
+          "Publisher": "JCF Ploemen (jcfp) <linux@jcf.pm>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "readline-common",
+          "DisplayVersion": "7.0-5",
+          "Publisher": "Matthias Klose <doko@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "sed",
+          "DisplayVersion": "4.7-1",
+          "Publisher": "Clint Adams <clint@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "sensible-utils",
+          "DisplayVersion": "0.0.12",
+          "Publisher": "Anibal Monsalve Salazar <anibal@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "sysvinit-utils",
+          "DisplayVersion": "2.93-8",
+          "Publisher": "Debian sysvinit maintainers <debian-init-diversity@chiark.greenend.org.uk>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "tar",
+          "DisplayVersion": "1.30+dfsg-6",
+          "Publisher": "Bdale Garbee <bdale@gag.com>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "tzdata",
+          "DisplayVersion": "2021a-0+deb10u1",
+          "Publisher": "GNU Libc Maintainers <debian-glibc@lists.debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "ucf",
+          "DisplayVersion": "3.0038+nmu1",
+          "Publisher": "Manoj Srivastava <srivasta@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "util-linux",
+          "DisplayVersion": "2.33.1-0.1",
+          "Publisher": "LaMont Jones <lamont@debian.org>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "xz-utils",
+          "DisplayVersion": "5.2.4-1",
+          "Publisher": "Jonathan Nieder <jrnieder@gmail.com>",
+          "InstallDate": ""
+        },
+        {
+          "DisplayName": "zlib1g",
+          "DisplayVersion": "1:1.2.11.dfsg-1",
+          "Publisher": "Mark Brown <broonie@debian.org>",
+          "InstallDate": ""
+        }
+      ],
+      "cve_matches": {},
+      "scan_duration_s": 0.17
+    },
+    "users": {
+      "status": "completed",
+      "platform": "linux",
+      "local_users": [
+        {
+          "Name": "root",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 0,
+          "Shell": "/bin/bash",
+          "Home": "/root",
+          "is_system": true
+        },
+        {
+          "Name": "daemon",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 1,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/usr/sbin",
+          "is_system": true
+        },
+        {
+          "Name": "bin",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 2,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/bin",
+          "is_system": true
+        },
+        {
+          "Name": "sys",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 3,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/dev",
+          "is_system": true
+        },
+        {
+          "Name": "sync",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 4,
+          "Shell": "/bin/sync",
+          "Home": "/bin",
+          "is_system": true
+        },
+        {
+          "Name": "games",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 5,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/usr/games",
+          "is_system": true
+        },
+        {
+          "Name": "man",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 6,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/cache/man",
+          "is_system": true
+        },
+        {
+          "Name": "lp",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 7,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/spool/lpd",
+          "is_system": true
+        },
+        {
+          "Name": "mail",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 8,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/mail",
+          "is_system": true
+        },
+        {
+          "Name": "news",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 9,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/spool/news",
+          "is_system": true
+        },
+        {
+          "Name": "uucp",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 10,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/spool/uucp",
+          "is_system": true
+        },
+        {
+          "Name": "proxy",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 13,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/bin",
+          "is_system": true
+        },
+        {
+          "Name": "www-data",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 33,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/www",
+          "is_system": true
+        },
+        {
+          "Name": "backup",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 34,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/backups",
+          "is_system": true
+        },
+        {
+          "Name": "list",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 38,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/list",
+          "is_system": true
+        },
+        {
+          "Name": "irc",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 39,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/run/ircd",
+          "is_system": true
+        },
+        {
+          "Name": "gnats",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 41,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/var/lib/gnats",
+          "is_system": true
+        },
+        {
+          "Name": "nobody",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 65534,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/nonexistent",
+          "is_system": false
+        },
+        {
+          "Name": "_apt",
+          "Enabled": false,
+          "PasswordRequired": false,
+          "PasswordLastSet": "18799 days since epoch",
+          "LastLogon": "",
+          "PasswordNeverExpires": true,
+          "AccountExpires": "never",
+          "UID": 100,
+          "Shell": "/usr/sbin/nologin",
+          "Home": "/nonexistent",
+          "is_system": true
+        }
+      ],
+      "admins": [
+        {
+          "Name": "root",
+          "ObjectClass": "User",
+          "PrincipalSource": "uid0/root"
+        }
+      ],
+      "password_policy": {
+        "PASS_MAX_DAYS": "99999",
+        "PASS_MIN_DAYS": "0",
+        "PASS_WARN_AGE": "7",
+        "ENCRYPT_METHOD": "SHA512"
+      },
+      "logon_events": [],
+      "guest_account": {
+        "Name": "nobody",
+        "Enabled": true,
+        "note": "linux has no Windows-style guest account"
+      },
+      "passwordless_accounts": [],
+      "nopasswd_sudoers": [],
+      "scan_duration_s": 0.06
+    },
+    "processes": {
+      "status": "completed",
+      "platform": "linux",
+      "process_count": 10,
+      "processes": [
+        {
+          "Id": 24,
+          "ProcessName": "python3",
+          "CPU": 16.0,
+          "WorkingSet": 23601152,
+          "Path": "/usr/bin/python3.7",
+          "Company": "root",
+          "Description": "python3 /opt/host-scanner/scan_target.py"
+        },
+        {
+          "Id": 1,
+          "ProcessName": "apache2",
+          "CPU": 0.0,
+          "WorkingSet": 32927744,
+          "Path": "/usr/sbin/apache2",
+          "Company": "root",
+          "Description": "apache2 -DFOREGROUND"
+        },
+        {
+          "Id": 19,
+          "ProcessName": "apache2",
+          "CPU": 0.0,
+          "WorkingSet": 8880128,
+          "Path": "",
+          "Company": "www-data",
+          "Description": "apache2 -DFOREGROUND"
+        },
+        {
+          "Id": 20,
+          "ProcessName": "apache2",
+          "CPU": 0.0,
+          "WorkingSet": 8880128,
+          "Path": "",
+          "Company": "www-data",
+          "Description": "apache2 -DFOREGROUND"
+        },
+        {
+          "Id": 21,
+          "ProcessName": "apache2",
+          "CPU": 0.0,
+          "WorkingSet": 8880128,
+          "Path": "",
+          "Company": "www-data",
+          "Description": "apache2 -DFOREGROUND"
+        },
+        {
+          "Id": 22,
+          "ProcessName": "apache2",
+          "CPU": 0.0,
+          "WorkingSet": 8880128,
+          "Path": "",
+          "Company": "www-data",
+          "Description": "apache2 -DFOREGROUND"
+        },
+        {
+          "Id": 23,
+          "ProcessName": "apache2",
+          "CPU": 0.0,
+          "WorkingSet": 8880128,
+          "Path": "",
+          "Company": "www-data",
+          "Description": "apache2 -DFOREGROUND"
+        },
+        {
+          "Id": 120,
+          "ProcessName": "sh",
+          "CPU": 0.0,
+          "WorkingSet": 1376256,
+          "Path": "",
+          "Company": "root",
+          "Description": "/bin/sh -c ps -eo pid=,comm=,pcpu=,rss=,user=,args= --sort=-pcpu --no-headers 2>/dev/null | head -n 200"
+        },
+        {
+          "Id": 121,
+          "ProcessName": "ps",
+          "CPU": 0.0,
+          "WorkingSet": 2555904,
+          "Path": "",
+          "Company": "root",
+          "Description": "ps -eo pid=,comm=,pcpu=,rss=,user=,args= --sort=-pcpu --no-headers"
+        },
+        {
+          "Id": 122,
+          "ProcessName": "head",
+          "CPU": 0.0,
+          "WorkingSet": 1179648,
+          "Path": "",
+          "Company": "root",
+          "Description": "head -n 200"
+        }
+      ],
+      "services_stopped_disabled": [],
+      "suspicious_flagged": [],
+      "unsigned_executables": [],
+      "scan_duration_s": 0.12
+    },
+    "startup": {
+      "status": "completed",
+      "platform": "linux",
+      "registry_run_keys": [],
+      "scheduled_tasks": [],
+      "startup_folder": [],
+      "browser_extensions": {},
+      "wmi_subscriptions": [
+        {
+          "Name": "/etc/profile",
+          "Query": "# /etc/profile: system-wide .profile file for the Bourne shell (sh(1))\n# and Bourne compatible shells (bash(1), ksh(1), ash(1), ...).\n\nif [ \"`id -u`\" -eq 0 ]; then\n  PATH=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\nelse\n  PATH=\"/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games\"\nfi\nexport PATH\n\nif [ \"${PS1-}\" ]; then\n  if [ \"${BASH-}\" ] && [ \"$BASH\" != \"/bin/sh\" ]; then\n    # The file bash.bashrc already sets the default PS1.\n    # PS1='\\h:\\w\\$ '\n    if [ -f /etc/bash.ba"
+        },
+        {
+          "Name": "/etc/bash.bashrc",
+          "Query": "# System-wide .bashrc file for interactive bash(1) shells.\n\n# To enable the settings / commands in this file for login shells as well,\n# this file has to be sourced in /etc/profile.\n\n# If not running interactively, don't do anything\n[ -z \"$PS1\" ] && return\n\n# check the window size after each command and, if necessary,\n# update the values of LINES and COLUMNS.\nshopt -s checkwinsize\n\n# set variable identifying the chroot you work in (used in the prompt below)\nif [ -z \"${debian_chroot:-}\" ] && [ -r"
+        }
+      ],
+      "scan_duration_s": 0.01
+    },
+    "hardware": {
+      "status": "completed",
+      "platform": "linux",
+      "secure_boot": {
+        "Enabled": false,
+        "Supported": false,
+        "reason": "Not booted in UEFI mode"
+      },
+      "tpm": {
+        "TpmPresent": false,
+        "TpmReady": false
+      },
+      "virtualization_security": {
+        "VBSEnabled": "unknown",
+        "HVCIEnabled": "unknown",
+        "CredentialGuard": "unknown",
+        "running_in_virt": false,
+        "virt_type": "none"
+      },
+      "bios_info": {},
+      "memory_integrity": {
+        "Enabled": true,
+        "WasEnabledBy": "kernel-build",
+        "kaslr": true,
+        "smep": true,
+        "smap": true,
+        "iommu": false,
+        "lockdown_mode": "not_set",
+        "cmdline": "initrd=\\initrd.img WSL_ROOT_INIT=1 panic=-1 nr_cpus=24 hv_utils.timesync_implicit=1 console=hvc0 debug pty.legacy_count=0 WSL_ENABLE_CRASH_DUMP=1"
+      },
+      "windows_security_features": {
+        "DEP_Policy": "Enabled (NX bit)",
+        "ASLR_Enabled": true,
+        "ASLR_value": "2",
+        "CFG_Enabled": "not_applicable",
+        "SmartScreen": "not_applicable",
+        "ptrace_scope": "1",
+        "kptr_restrict": "1",
+        "dmesg_restrict": "0"
+      },
+      "scan_duration_s": 0.0
+    }
+  }
+}

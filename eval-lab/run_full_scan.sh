@@ -2,6 +2,9 @@
 # End-to-end scan+match+analyze wrapper for one eval-lab container.
 #
 # Usage:  ./run_full_scan.sh <container> [--engine=claude|fake] [--check-versions] [--no-probes]
+#                                          [--v2] [--prober-target=<host>] [--prober-ports=<list>]
+#                                          [--attack-simulator] [--fix-publisher]
+#                                          [--report=<path>]
 #
 # Delegates all real work to run_full_scan.py -- this shell wrapper exists
 # because the roadmap lists it by name and it's a slightly friendlier entry
@@ -11,7 +14,12 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "usage: $0 <container> [--engine=...] [--check-versions] [--no-probes]" >&2
-  echo "example: $0 eval-web-vuln --engine=claude" >&2
+  echo "                       [--v2] [--prober-target=<host>] [--prober-ports=<list>]" >&2
+  echo "                       [--attack-simulator] [--fix-publisher] [--report=<path>]" >&2
+  echo "" >&2
+  echo "examples:" >&2
+  echo "  $0 eval-web-vuln --engine=claude              # v1 pipeline" >&2
+  echo "  $0 eval-db-exposed --engine=claude --v2       # full v2 with report" >&2
   exit 2
 fi
 

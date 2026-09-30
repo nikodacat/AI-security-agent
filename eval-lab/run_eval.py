@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
 
         print(f"[run]     {c}: full chain with engine={args.engine} ...")
         t0 = time.monotonic()
-        rc = _run_full_scan(c, args.engine, check_versions=True)
+        rc = _run_full_scan(c, args.engine, check_versions=True, v2=args.v2)
         elapsed = time.monotonic() - t0
         timings[c] = elapsed
         if rc != 0:
@@ -151,10 +151,14 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Verdict engine (default: claude)")
     p.add_argument("--reuse-existing", action="store_true",
                    help="Skip re-running the pipeline where verdicts.json already exists.")
+    p.add_argument("--v2", action="store_true",
+                   help="Run each container through the full v2 pipeline "
+                        "(prober + attack-simulator + fix-publisher + report). "
+                        "Passes --v2 through to run_full_scan.py.")
     return p
 
 
-def _run_full_scan(container: str, engine: str, check_versions: bool) -> int:
+def _run_full_scan(container: str, engine: str, check_versions: bool, *, v2: bool = False) -> int:
     env = dict(os.environ)
     env["MSYS_NO_PATHCONV"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
@@ -165,6 +169,8 @@ def _run_full_scan(container: str, engine: str, check_versions: bool) -> int:
     ]
     if check_versions:
         argv.append("--check-versions")
+    if v2:
+        argv.append("--v2")
     proc = subprocess.run(argv, env=env)
     return proc.returncode
 
