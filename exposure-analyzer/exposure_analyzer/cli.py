@@ -52,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Where to write the verdicts JSON. Default: reports/verdicts.json")
     p_analyze.add_argument("--report", type=Path, default=None,
                            help="Optional existing host-scanner HTML report to append verdicts to.")
+    p_analyze.add_argument("--attack-narratives", type=Path, default=None,
+                           help="Optional path to attack_narratives.json from attack-simulator (v2-9). "
+                                "When set together with --report, adds an Attack Narratives section.")
+    p_analyze.add_argument("--remediations", type=Path, default=None,
+                           help="Optional path to remediations.json from fix-publisher (v2-10). "
+                                "When set together with --report, adds a Remediation Drafts section.")
     p_analyze.add_argument("--engine", choices=("fake", "claude"), default="fake",
                            help="Verdict engine. fake=cve-matcher passthrough (default); "
                                 "claude=ExposureAgent via claude-agent-sdk.")
@@ -194,9 +200,19 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     print(render_verdicts_summary(verdicts))
 
     if args.report is not None:
-        append_verdicts_to_report(verdicts, args.report)
+        append_verdicts_to_report(
+            verdicts,
+            args.report,
+            attack_narratives_path=args.attack_narratives,
+            remediations_path=args.remediations,
+        )
         print()
-        print(f"  appended Verdicts section to {args.report}")
+        appended = ["Verdicts"]
+        if args.attack_narratives is not None:
+            appended.append("Attack Narratives")
+        if args.remediations is not None:
+            appended.append("Remediation Drafts")
+        print(f"  appended {' + '.join(appended)} section(s) to {args.report}")
 
     return 0
 

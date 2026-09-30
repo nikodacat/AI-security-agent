@@ -13,6 +13,7 @@ Design constraints:
 
 from __future__ import annotations
 
+import html
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -205,3 +206,139 @@ def render_markdown(
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ------------------------------------------------------------------ #
+# HTML rendering (for v2-11 report integration)                      #
+# ------------------------------------------------------------------ #
+
+SECTION_MARKER = "<!-- exposure-analyzer:remediations -->"
+
+
+def render_html_section(
+    rems: list[Remediation],
+    *,
+    generated_at: str = "",
+) -> str:
+    """Render remediations as an HTML `<section>` fragment.
+
+    Same shape as attack_simulator.narratives.render_html_section — uses
+    the host-scanner report's existing CSS classes (`card`, `muted`),
+    html.escapes every model field, and wraps in
+    SECTION_MARKER / SECTION_MARKER + " end" sentinels for idempotent
+    re-injection by exposure-analyzer's report.py.
+    """
+    parts: list[str] = []
+    parts.append(SECTION_MARKER)
+    parts.append('  <div class="card">')
+    parts.append("    <h2>Remediation Drafts</h2>")
+    scope = (
+        f'{len(rems)} remediation(s) from CONFIRMED verdicts. '
+        "Draft commands — review against your fleet's pins before applying."
+    )
+    meta_bits = [scope]
+    if generated_at:
+        meta_bits.append(f"Generated {html.escape(generated_at)}")
+    parts.append(
+        '    <p class="muted" style="margin-bottom:0.75rem;">'
+        + " · ".join(meta_bits)
+        + "</p>"
+    )
+
+    if not rems:
+        parts.append(
+            '    <p class="muted" style="text-align:center;">'
+            "(no CONFIRMED verdicts — nothing to remediate)</p>"
+        )
+    else:
+        for r in rems:
+            parts.append(_render_remediation_block(r))
+
+    parts.append("  </div>")
+    parts.append(f"{SECTION_MARKER} end")
+    return "\n".join(parts)
+
+
+def _render_remediation_block(r: Remediation) -> str:
+    heading = f"{html.escape(r.cve_id)}"
+    if r.target:
+        heading += f' <span class="muted">— target: <code>{html.escape(r.target)}</code></span>'
+
+    meta_bits: list[str] = []
+    if r.generated_at:
+        meta_bits.append(html.escape(r.generated_at))
+    if r.model:
+        meta_bits.append(f"model: {html.escape(r.model)}")
+    meta_html = ""
+    if meta_bits:
+        meta_html = (
+            '<div class="muted" style="font-size:0.85em;margin-top:-0.35rem;'
+            'margin-bottom:0.35rem;">'
+            + " · ".join(meta_bits)
+            + "</div>"
+        )
+
+    verdict_html = ""
+    if r.source_verdict_reason:
+        verdict_html = (
+            '<blockquote style="margin:0.5rem 0;padding:0.5rem 0.75rem;'
+            'border-left:3px solid #64748b;background:#f8fafc;'
+            'font-size:0.9em;color:#334155;">'
+            f'<strong>Analyzer verdict:</strong> {html.escape(r.source_verdict_reason)}'
+            "</blockquote>"
+        )
+
+    # Package update — always shown, even if empty apt_command (escape hatch).
+    apt = r.apt_command.strip()
+    if apt:
+        pkg_html = _code_block(apt, lang="bash")
+    else:
+        pkg_html = (
+            '<p class="muted" style="font-style:italic;">'
+            "(no apt command — see explanation below)</p>"
+        )
+
+    # Config change — sentinel collapses to italic line.
+    cfg = r.config_diff.strip()
+    if not cfg or cfg.lower() == _NO_CONFIG:
+        cfg_html = f'<p class="muted" style="font-style:italic;">{html.escape(_NO_CONFIG)}.</p>'
+    else:
+        cfg_html = _code_block(cfg, lang="diff")
+
+    # Service restart — sentinel collapses to italic line.
+    restart = r.service_restart.strip()
+    if not restart or restart.lower() == _NO_RESTART:
+        restart_html = f'<p class="muted" style="font-style:italic;">{html.escape(_NO_RESTART)}.</p>'
+    else:
+        restart_html = _code_block(restart, lang="bash")
+
+    explanation_html = (
+        f"<p>{html.escape(r.explanation.strip()) or '<em>(no explanation provided)</em>'}</p>"
+    )
+
+    return (
+        '    <div style="margin:1rem 0;padding:0.75rem 1rem;'
+        'border:1px solid #e2e8f0;border-radius:6px;">\n'
+        f"      <h3 style=\"margin-top:0;\">{heading}</h3>\n"
+        f"      {meta_html}\n"
+        f"      {verdict_html}\n"
+        '      <h4 style="margin-bottom:0.25rem;">Package update</h4>\n'
+        f"      {pkg_html}\n"
+        '      <h4 style="margin-bottom:0.25rem;">Config change</h4>\n'
+        f"      {cfg_html}\n"
+        '      <h4 style="margin-bottom:0.25rem;">Service restart</h4>\n'
+        f"      {restart_html}\n"
+        '      <h4 style="margin-bottom:0.25rem;">Why this works</h4>\n'
+        f"      {explanation_html}\n"
+        "    </div>"
+    )
+
+
+def _code_block(text: str, *, lang: str = "") -> str:
+    """Render a text blob as an html-escaped <pre><code> block."""
+    return (
+        f'<pre style="background:#0f172a;color:#e2e8f0;padding:0.6rem 0.8rem;'
+        f'border-radius:4px;overflow-x:auto;font-size:0.85em;">'
+        f'<code class="language-{html.escape(lang)}">{html.escape(text)}</code>'
+        "</pre>"
+    )

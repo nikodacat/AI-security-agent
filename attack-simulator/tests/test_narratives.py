@@ -10,8 +10,10 @@ from pathlib import Path
 from attack_simulator.narratives import (
     Narrative,
     SCHEMA_VERSION,
+    SECTION_MARKER,
     dump_narratives,
     load_narratives,
+    render_html_section,
     render_markdown,
 )
 
@@ -139,6 +141,80 @@ class MarkdownRenderTests(unittest.TestCase):
         md = render_markdown([n])
         # No "_·_" bits present
         self.assertNotIn("model:", md)
+
+
+class HtmlSectionTests(unittest.TestCase):
+    def _sample(self) -> Narrative:
+        return Narrative(
+            cve_id="CVE-2022-0543",
+            target="eval-db-exposed",
+            narrative=(
+                "### Recon\nAttacker scans and finds port 6379 open.\n\n"
+                "### Discovery\nBanner confirms Redis 6.2.6.\n\n"
+                "### Exploitation\nLua sandbox escape leads to code exec."
+            ),
+            source_verdict_reason="Redis 6.2.6 unpatched.",
+            generated_at="2026-10-01T10:00:00+00:00",
+            model="sonnet",
+        )
+
+    def test_section_wrapped_in_markers(self) -> None:
+        html = render_html_section([self._sample()])
+        self.assertTrue(html.startswith(SECTION_MARKER))
+        self.assertIn(SECTION_MARKER + " end", html)
+
+    def test_uses_host_scanner_card_class(self) -> None:
+        html = render_html_section([self._sample()])
+        self.assertIn('class="card"', html)
+        self.assertIn("<h2>Attack Narratives</h2>", html)
+
+    def test_scope_line_reflects_count(self) -> None:
+        html = render_html_section([self._sample(), self._sample()])
+        self.assertIn("2 narrative(s)", html)
+
+    def test_empty_narratives_shows_placeholder(self) -> None:
+        html = render_html_section([])
+        self.assertIn("no CONFIRMED verdicts", html)
+
+    def test_three_section_headings_rendered_as_h4(self) -> None:
+        html = render_html_section([self._sample()])
+        self.assertIn("<h4", html)
+        self.assertIn("Recon", html)
+        self.assertIn("Discovery", html)
+        self.assertIn("Exploitation", html)
+
+    def test_verdict_reason_rendered_as_blockquote(self) -> None:
+        html = render_html_section([self._sample()])
+        self.assertIn("<blockquote", html)
+        self.assertIn("Analyzer verdict", html)
+        self.assertIn("Redis 6.2.6 unpatched", html)
+
+    def test_generated_at_shown_in_scope_line(self) -> None:
+        html = render_html_section([self._sample()], generated_at="2026-10-01T10:00:00+00:00")
+        self.assertIn("2026-10-01T10:00:00+00:00", html)
+
+    def test_xss_escape_in_cve_id(self) -> None:
+        n = Narrative(cve_id="<script>alert(1)</script>", target="t", narrative="body")
+        html = render_html_section([n])
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_xss_escape_in_narrative_body(self) -> None:
+        n = Narrative(
+            cve_id="CVE-X", target="t",
+            narrative="### Recon\n<img src=x onerror=alert(1)>",
+        )
+        html = render_html_section([n])
+        self.assertNotIn("<img src=x", html)
+        self.assertIn("&lt;img", html)
+
+    def test_xss_escape_in_verdict_reason(self) -> None:
+        n = Narrative(
+            cve_id="X", target="t", narrative="body",
+            source_verdict_reason='"><script>bad</script>',
+        )
+        html = render_html_section([n])
+        self.assertNotIn("<script>bad</script>", html)
 
 
 if __name__ == "__main__":

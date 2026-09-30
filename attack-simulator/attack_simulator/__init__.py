@@ -24,6 +24,7 @@ from .narratives import (
     Narrative,
     dump_narratives,
     load_narratives,
+    render_html_section,
     render_markdown,
 )
 from .narrator import AttackSimulator, narratives_from_verdicts
@@ -34,6 +35,7 @@ __all__ = [
     "narratives_from_verdicts",
     "dump_narratives",
     "load_narratives",
+    "render_html_section",
     "render_markdown",
     "__version__",
 ]

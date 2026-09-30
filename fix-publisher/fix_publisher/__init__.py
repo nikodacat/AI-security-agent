@@ -24,6 +24,7 @@ from .remediations import (
     Remediation,
     dump_remediations,
     load_remediations,
+    render_html_section,
     render_markdown,
 )
 from .publisher import FixPublisher, remediations_from_verdicts
@@ -34,6 +35,7 @@ __all__ = [
     "remediations_from_verdicts",
     "dump_remediations",
     "load_remediations",
+    "render_html_section",
     "render_markdown",
     "__version__",
 ]

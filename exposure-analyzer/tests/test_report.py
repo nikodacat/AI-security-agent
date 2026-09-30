@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -228,6 +229,169 @@ class TestRenderVerdictsSummary(unittest.TestCase):
         self.assertIn("CVE-2014-0160", text)
         self.assertIn("CONFIRMED", text)
         self.assertIn("MITIGATED_BY_CONFIG", text)
+
+
+class TestSiblingSectionInjection(unittest.TestCase):
+    """v2-11 — analyzer's report absorbs sibling JSON outputs.
+
+    These tests use the real sibling packages (attack-simulator,
+    fix-publisher) via lazy import + sys.path manipulation done by
+    report.py. If the sibling packages aren't importable in the test
+    environment, these tests skip cleanly rather than fail.
+    """
+
+    def _write_report(self, td: Path) -> Path:
+        p = td / "report.html"
+        p.write_text(_MINIMAL_REPORT_HTML, encoding="utf-8")
+        return p
+
+    def _write_narratives(self, td: Path) -> Path:
+        p = td / "attack_narratives.json"
+        payload = {
+            "schema_version": "attack-simulator/v1",
+            "generated_at": "2026-10-01T10:00:00+00:00",
+            "narratives": [
+                {
+                    "cve_id": "CVE-2022-0543",
+                    "target": "eval-db-exposed",
+                    "narrative": (
+                        "### Recon\nAttacker finds port 6379.\n\n"
+                        "### Discovery\nBanner: Redis 6.2.6.\n\n"
+                        "### Exploitation\nLua sandbox escape."
+                    ),
+                    "source_verdict_reason": "Redis 6.2.6 unpatched.",
+                    "generated_at": "2026-10-01T10:00:00+00:00",
+                    "model": "claude-sonnet",
+                },
+            ],
+        }
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        return p
+
+    def _write_remediations(self, td: Path) -> Path:
+        p = td / "remediations.json"
+        payload = {
+            "schema_version": "fix-publisher/v1",
+            "generated_at": "2026-10-01T10:00:00+00:00",
+            "remediations": [
+                {
+                    "cve_id": "CVE-2022-24735",
+                    "target": "eval-db-exposed",
+                    "apt_command": "apt install redis-server=6:6.2.7-1",
+                    "config_diff": "no config change needed",
+                    "service_restart": "systemctl restart redis-server",
+                    "explanation": "Redis 6.2.7 patches the Lua sandbox escape.",
+                    "source_verdict_reason": "Redis 6.2.6 predates 6.2.7 fix.",
+                    "generated_at": "2026-10-01T10:00:00+00:00",
+                    "model": "claude-sonnet",
+                },
+            ],
+        }
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        return p
+
+    def _sibling_importable(self) -> bool:
+        """Ensure both sibling packages are on sys.path + importable.
+
+        report.py adds sibling roots to sys.path only when it actually
+        needs them (per-call). For tests we prime both paths up-front by
+        touching each sibling's expected root; then attempt the imports.
+        """
+        import sys
+        from exposure_analyzer.report import _ATTACK_SIMULATOR_ROOT, _FIX_PUBLISHER_ROOT
+        for root in (_ATTACK_SIMULATOR_ROOT, _FIX_PUBLISHER_ROOT):
+            p = str(root)
+            if root.exists() and p not in sys.path:
+                sys.path.insert(0, p)
+        try:
+            import attack_simulator  # noqa: F401
+            import fix_publisher  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    def test_attack_section_injected(self):
+        if not self._sibling_importable():
+            self.skipTest("sibling attack-simulator not importable")
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            report = self._write_report(td_path)
+            narratives = self._write_narratives(td_path)
+            append_verdicts_to_report(_sample_verdicts(), report, attack_narratives_path=narratives)
+            html = report.read_text(encoding="utf-8")
+            self.assertIn("<!-- exposure-analyzer:attack-narratives -->", html)
+            self.assertIn("Attack Narratives", html)
+            self.assertIn("CVE-2022-0543", html)
+            self.assertIn("Recon", html)
+
+    def test_remediation_section_injected(self):
+        if not self._sibling_importable():
+            self.skipTest("sibling fix-publisher not importable")
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            report = self._write_report(td_path)
+            remediations = self._write_remediations(td_path)
+            append_verdicts_to_report(_sample_verdicts(), report, remediations_path=remediations)
+            html = report.read_text(encoding="utf-8")
+            self.assertIn("<!-- exposure-analyzer:remediations -->", html)
+            self.assertIn("Remediation Drafts", html)
+            self.assertIn("apt install redis-server=6:6.2.7-1", html)
+            self.assertIn("Package update", html)
+
+    def test_both_sections_injected(self):
+        if not self._sibling_importable():
+            self.skipTest("sibling packages not importable")
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            report = self._write_report(td_path)
+            append_verdicts_to_report(
+                _sample_verdicts(),
+                report,
+                attack_narratives_path=self._write_narratives(td_path),
+                remediations_path=self._write_remediations(td_path),
+            )
+            html = report.read_text(encoding="utf-8")
+            self.assertIn("Attack Narratives", html)
+            self.assertIn("Remediation Drafts", html)
+
+    def test_reinjection_replaces_sibling_sections(self):
+        """Running twice with siblings should not duplicate sections."""
+        if not self._sibling_importable():
+            self.skipTest("sibling packages not importable")
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            report = self._write_report(td_path)
+            narratives = self._write_narratives(td_path)
+            remediations = self._write_remediations(td_path)
+            for _ in range(3):
+                append_verdicts_to_report(
+                    _sample_verdicts(), report,
+                    attack_narratives_path=narratives,
+                    remediations_path=remediations,
+                )
+            html = report.read_text(encoding="utf-8")
+            # Each block has a start marker AND an "end" marker that begins
+            # with the start marker as a prefix, so plain .count() returns 2
+            # per block. After N idempotent re-injections we still want 1
+            # block per section — count == 2.
+            self.assertEqual(html.count("<!-- exposure-analyzer:verdicts -->"), 2)
+            self.assertEqual(html.count("<!-- exposure-analyzer:attack-narratives -->"), 2)
+            self.assertEqual(html.count("<!-- exposure-analyzer:remediations -->"), 2)
+            # And an "end" marker appears exactly once per block.
+            self.assertEqual(html.count("<!-- exposure-analyzer:verdicts --> end"), 1)
+            self.assertEqual(html.count("<!-- exposure-analyzer:attack-narratives --> end"), 1)
+            self.assertEqual(html.count("<!-- exposure-analyzer:remediations --> end"), 1)
+
+    def test_no_sibling_paths_leaves_original_v1_behavior(self):
+        """Not passing sibling paths should be identical to v1 behavior."""
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            report = self._write_report(td_path)
+            append_verdicts_to_report(_sample_verdicts(), report)
+            html = report.read_text(encoding="utf-8")
+            self.assertNotIn("<!-- exposure-analyzer:attack-narratives -->", html)
+            self.assertNotIn("<!-- exposure-analyzer:remediations -->", html)
+            self.assertIn("<!-- exposure-analyzer:verdicts -->", html)
 
 
 if __name__ == "__main__":

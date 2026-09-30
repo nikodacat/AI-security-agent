@@ -10,8 +10,10 @@ from pathlib import Path
 from fix_publisher.remediations import (
     Remediation,
     SCHEMA_VERSION,
+    SECTION_MARKER,
     dump_remediations,
     load_remediations,
+    render_html_section,
     render_markdown,
 )
 
@@ -166,6 +168,86 @@ class MarkdownRenderTests(unittest.TestCase):
         rems = [self._sample(), self._sample(), self._sample()]
         md = render_markdown(rems)
         self.assertIn("3 remediation(s)", md)
+
+
+class HtmlSectionTests(unittest.TestCase):
+    def _sample(self) -> Remediation:
+        return Remediation(
+            cve_id="CVE-2022-0778",
+            target="eval-cms-plugin",
+            apt_command="apt install libssl1.1=1.1.1n-0+deb10u3",
+            config_diff="",
+            service_restart="systemctl restart apache2",
+            explanation="Upgrade OpenSSL past the BN_mod_sqrt fix.",
+            source_verdict_reason="Pre-fix libssl1.1 1.1.1d.",
+            generated_at="2026-10-01T10:00:00+00:00",
+            model="sonnet",
+        )
+
+    def test_section_wrapped_in_markers(self) -> None:
+        html_out = render_html_section([self._sample()])
+        self.assertTrue(html_out.startswith(SECTION_MARKER))
+        self.assertIn(SECTION_MARKER + " end", html_out)
+
+    def test_uses_host_scanner_card_class(self) -> None:
+        html_out = render_html_section([self._sample()])
+        self.assertIn('class="card"', html_out)
+        self.assertIn("<h2>Remediation Drafts</h2>", html_out)
+
+    def test_all_four_subsections_rendered(self) -> None:
+        html_out = render_html_section([self._sample()])
+        self.assertIn("Package update", html_out)
+        self.assertIn("Config change", html_out)
+        self.assertIn("Service restart", html_out)
+        self.assertIn("Why this works", html_out)
+
+    def test_apt_command_rendered_in_code_block(self) -> None:
+        html_out = render_html_section([self._sample()])
+        self.assertIn("apt install libssl1.1=1.1.1n-0+deb10u3", html_out)
+        self.assertIn("language-bash", html_out)
+
+    def test_empty_apt_command_shows_muted_line(self) -> None:
+        from dataclasses import replace
+        r = replace(self._sample(), apt_command="")
+        html_out = render_html_section([r])
+        self.assertIn("no apt command", html_out)
+
+    def test_empty_config_diff_collapses_to_muted_line(self) -> None:
+        html_out = render_html_section([self._sample()])
+        self.assertIn("no config change needed", html_out)
+
+    def test_config_diff_present_uses_diff_block(self) -> None:
+        from dataclasses import replace
+        r = replace(self._sample(), config_diff="- old\n+ new")
+        html_out = render_html_section([r])
+        self.assertIn("language-diff", html_out)
+        self.assertIn("+ new", html_out)
+
+    def test_verdict_reason_as_blockquote(self) -> None:
+        html_out = render_html_section([self._sample()])
+        self.assertIn("<blockquote", html_out)
+        self.assertIn("Analyzer verdict", html_out)
+
+    def test_scope_count_matches_input(self) -> None:
+        html_out = render_html_section([self._sample(), self._sample()])
+        self.assertIn("2 remediation(s)", html_out)
+
+    def test_empty_remediations_shows_placeholder(self) -> None:
+        html_out = render_html_section([])
+        self.assertIn("no CONFIRMED verdicts", html_out)
+
+    def test_xss_escape_in_apt_command(self) -> None:
+        from dataclasses import replace
+        r = replace(self._sample(), apt_command='apt install <script>alert(1)</script>')
+        html_out = render_html_section([r])
+        self.assertNotIn("<script>alert(1)</script>", html_out)
+        self.assertIn("&lt;script&gt;", html_out)
+
+    def test_xss_escape_in_explanation(self) -> None:
+        from dataclasses import replace
+        r = replace(self._sample(), explanation='"><img src=x onerror=1>')
+        html_out = render_html_section([r])
+        self.assertNotIn("<img src=x onerror=1>", html_out)
 
 
 if __name__ == "__main__":

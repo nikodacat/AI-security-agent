@@ -15,7 +15,9 @@ Design constraints:
 
 from __future__ import annotations
 
+import html
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -160,3 +162,132 @@ def render_markdown(
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ------------------------------------------------------------------ #
+# HTML rendering (for v2-11 report integration)                      #
+# ------------------------------------------------------------------ #
+
+SECTION_MARKER = "<!-- exposure-analyzer:attack-narratives -->"
+
+
+def render_html_section(
+    narratives: list[Narrative],
+    *,
+    generated_at: str = "",
+) -> str:
+    """Render narratives as an HTML `<section>` fragment.
+
+    Uses the host-scanner report's existing CSS classes (`card`, `muted`)
+    for visual consistency; every model-produced text field is
+    `html.escape`d so hostile narrator output cannot inject markup.
+    Wrapped in `SECTION_MARKER` / `SECTION_MARKER + " end"` sentinels so
+    exposure-analyzer's report.py can re-inject idempotently on re-runs.
+    """
+    parts: list[str] = []
+    parts.append(SECTION_MARKER)
+    parts.append('  <div class="card">')
+    parts.append("    <h2>Attack Narratives</h2>")
+    scope = (
+        f'{len(narratives)} narrative(s) from CONFIRMED verdicts. '
+        "No exploit code, no attacker-tool invocations."
+    )
+    meta_bits = [scope]
+    if generated_at:
+        meta_bits.append(f"Generated {html.escape(generated_at)}")
+    parts.append(
+        '    <p class="muted" style="margin-bottom:0.75rem;">'
+        + " · ".join(meta_bits)
+        + "</p>"
+    )
+
+    if not narratives:
+        parts.append(
+            '    <p class="muted" style="text-align:center;">'
+            "(no CONFIRMED verdicts — nothing to narrate)</p>"
+        )
+    else:
+        for n in narratives:
+            parts.append(_render_narrative_block(n))
+
+    parts.append("  </div>")
+    parts.append(f"{SECTION_MARKER} end")
+    return "\n".join(parts)
+
+
+def _render_narrative_block(n: Narrative) -> str:
+    heading = f"{html.escape(n.cve_id)}"
+    if n.target:
+        heading += f' <span class="muted">— target: <code>{html.escape(n.target)}</code></span>'
+
+    meta_bits: list[str] = []
+    if n.generated_at:
+        meta_bits.append(html.escape(n.generated_at))
+    if n.model:
+        meta_bits.append(f"model: {html.escape(n.model)}")
+    meta_html = ""
+    if meta_bits:
+        meta_html = (
+            '<div class="muted" style="font-size:0.85em;margin-top:-0.35rem;'
+            'margin-bottom:0.35rem;">'
+            + " · ".join(meta_bits)
+            + "</div>"
+        )
+
+    verdict_html = ""
+    if n.source_verdict_reason:
+        verdict_html = (
+            '<blockquote style="margin:0.5rem 0;padding:0.5rem 0.75rem;'
+            'border-left:3px solid #64748b;background:#f8fafc;'
+            'font-size:0.9em;color:#334155;">'
+            f'<strong>Analyzer verdict:</strong> {html.escape(n.source_verdict_reason)}'
+            "</blockquote>"
+        )
+
+    body_html = _narrative_body_to_html(n.narrative)
+
+    return (
+        '    <div style="margin:1rem 0;padding:0.75rem 1rem;'
+        'border:1px solid #e2e8f0;border-radius:6px;">\n'
+        f"      <h3 style=\"margin-top:0;\">{heading}</h3>\n"
+        f"      {meta_html}\n"
+        f"      {verdict_html}\n"
+        f"      {body_html}\n"
+        "    </div>"
+    )
+
+
+_H3_RE = re.compile(r"^###\s+(.+?)\s*$")
+
+
+def _narrative_body_to_html(body: str) -> str:
+    """Convert the narrative body (Markdown-lite with ### headings) to HTML.
+
+    The narrative body from Claude follows the SYSTEM_PROMPT's contract:
+    `### Recon` / `### Discovery` / `### Exploitation` headings, each
+    followed by a paragraph. We convert `###` → `<h4>` and blank-line-
+    separated paragraphs → `<p>`. Everything is html.escape'd first.
+    """
+    lines = body.strip().splitlines()
+    parts: list[str] = []
+    para_buf: list[str] = []
+
+    def flush_para() -> None:
+        if para_buf:
+            text = " ".join(para_buf).strip()
+            if text:
+                parts.append(f"<p>{html.escape(text)}</p>")
+            para_buf.clear()
+
+    for line in lines:
+        m = _H3_RE.match(line)
+        if m:
+            flush_para()
+            parts.append(f'<h4 style="margin-bottom:0.25rem;">{html.escape(m.group(1))}</h4>')
+        elif line.strip() == "":
+            flush_para()
+        else:
+            para_buf.append(line.strip())
+    flush_para()
+
+    return "\n      ".join(parts) if parts else "<p><em>(empty narrative)</em></p>"
