@@ -60,9 +60,21 @@ External-attacker rule (applies when the "External-attacker view" section is pre
   that is ABSENCE OF EVIDENCE, not evidence of absence — do NOT downgrade to
   MITIGATED_BY_EXPOSURE just because the prober didn't scan the port. Reason
   from host_state + probe evidence instead.
-- Library CVEs (openssl, bash, glibc, ghostscript, zlib) are not tied to a
-  network port; network_state cannot promote or demote them. Ignore
-  network_state for library CVEs.
+- Library CVEs (openssl, bash, glibc, ghostscript, zlib, libxml2, libcurl,
+  and similar shared libraries) are decided by the Version-based rule ABOVE,
+  not by network_state. Even if a reachable service (Apache, nginx, sshd)
+  links against the library, that reachability does NOT promote a
+  patched-version library CVE to CONFIRMED. Worked examples:
+    * Heartbleed (CVE-2014-0160) on OpenSSL 1.1.1n (post-fix), reachable
+      Apache → MITIGATED_BY_CONFIG. Apache reachability is not evidence the
+      vulnerable code path exists.
+    * Shellshock (CVE-2014-6278) on bash 5.0 (post-fix), reachable Apache
+      with CGI → MITIGATED_BY_CONFIG. Bash version resolves the question.
+    * CVE-2022-0778 on OpenSSL 1.1.1d (PRE-fix, vulnerable) + reachable
+      Apache serving TLS → CONFIRMED. Library IS in an affected range AND
+      the network exposes it — this is the case v2's external leg was built
+      for.
+  Distinguisher: `verdict_detail` version status, not service reachability.
 
 Other rules:
 - Cite the specific evidence you used (config key names, port bindings, probe
