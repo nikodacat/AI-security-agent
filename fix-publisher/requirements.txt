@@ -1,0 +1,4 @@
+# fix-publisher runtime dependencies. Kept minimal — no target-side tooling,
+# no network calls except through claude-agent-sdk (deferred import).
+
+claude-agent-sdk>=0.2.130
