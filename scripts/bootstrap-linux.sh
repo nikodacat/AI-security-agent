@@ -41,6 +41,15 @@ pip install -r cve-matcher/requirements.txt
 echo "[bootstrap] Installing exposure-analyzer deps"
 pip install -r exposure-analyzer/requirements.txt
 
+echo "[bootstrap] Installing network-prober deps (v2)"
+pip install -r network-prober/requirements.txt
+
+echo "[bootstrap] Installing attack-simulator deps (v2)"
+pip install -r attack-simulator/requirements.txt
+
+echo "[bootstrap] Installing fix-publisher deps (v2)"
+pip install -r fix-publisher/requirements.txt
+
 if [ "${1:-}" = "--with-eval-lab" ]; then
     echo "[bootstrap] Installing eval-lab harness deps"
     pip install -r eval-lab/requirements.txt
@@ -50,7 +59,9 @@ fi
 
 echo
 echo "[bootstrap] Done. Activate with:  source .venv/bin/activate"
-echo "[bootstrap] Try a scan:            cd host-scanner && python main.py"
+echo "[bootstrap] Try a v1 scan:         cd host-scanner && python main.py"
+echo "[bootstrap] Try a v2 full chain:   ./eval-lab/run_full_scan.sh <container> --engine=claude --v2"
+echo "                                     (needs docker + eval-lab containers up)"
 echo
 if command -v claude >/dev/null 2>&1; then
     echo "[bootstrap] claude CLI found: $(claude --version 2>&1 | head -1)"
@@ -58,3 +69,5 @@ else
     echo "[bootstrap] Note: 'claude' CLI not on PATH -- install for --engine=claude runs;"
     echo "           pipeline still works with --engine=fake (deterministic, no AI)."
 fi
+echo
+echo "[bootstrap] Nmap (needed by network-prober): $(command -v nmap >/dev/null 2>&1 && echo "FOUND ($(nmap --version 2>&1 | head -1))" || echo 'NOT INSTALLED — apt install nmap')"

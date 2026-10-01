@@ -38,14 +38,26 @@ class Verdict:
     """Per-candidate impact-analysis result.
 
     Fields:
-      cve_id         : CVE identifier from the candidate.
-      verdict        : one of `VerdictType`.
-      reason         : one-paragraph human-readable explanation.
-      evidence       : structured dict citing the specific facts used
-                       (e.g. sshd_config keys, listening addresses, probe output).
-      probe_command  : the command actually executed (or "" if none).
-      probe_output   : captured stdout of the probe (or "" if none).
-      timestamp      : ISO-8601 UTC timestamp of verdict generation.
+      cve_id               : CVE identifier from the candidate.
+      verdict              : one of `VerdictType`.
+      reason               : one-paragraph human-readable explanation.
+      evidence             : structured dict citing the specific facts used
+                             (e.g. sshd_config keys, listening addresses, probe output).
+      probe_command        : the command actually executed (or "" if none).
+      probe_output         : captured stdout of the probe (or "" if none).
+      timestamp            : ISO-8601 UTC timestamp of verdict generation.
+      proposed_probe       : v2-7. When the analyzer has no KNOWN_PROBES entry
+                             and an LLM proposer is wired up, this holds the
+                             validated {binary, args, rationale, expected_signals}
+                             dict the model proposed. The proposal is NOT executed
+                             in v2-7 (execution + HITL is v2-8) — it's recorded
+                             so a human reviewer can see what the analyzer wanted
+                             to run. None when no proposal was made or one was made
+                             but failed validation (see `probe_proposal_error`).
+      probe_proposal_error : v2-7. Human-readable reason a proposal failed
+                             validation or the proposer call itself errored. Empty
+                             string when no proposal was attempted or the proposal
+                             succeeded.
     """
 
     cve_id: str
@@ -55,6 +67,8 @@ class Verdict:
     probe_command: str = ""
     probe_output: str = ""
     timestamp: str = ""
+    proposed_probe: dict[str, Any] | None = None
+    probe_proposal_error: str = ""
 
     def __post_init__(self) -> None:
         if not self.timestamp:
@@ -80,6 +94,8 @@ class Verdict:
             probe_command=d.get("probe_command", ""),
             probe_output=d.get("probe_output", ""),
             timestamp=d.get("timestamp", ""),
+            proposed_probe=d.get("proposed_probe"),
+            probe_proposal_error=d.get("probe_proposal_error", ""),
         )
 
 

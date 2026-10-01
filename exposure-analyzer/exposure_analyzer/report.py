@@ -3,12 +3,20 @@
 This module is the ONLY point of contact between the analyzer and the
 host-scanner report generator. Keeping the seam narrow means both can
 evolve independently.
+
+v2-11 extends this with two optional sibling-fed sections: attack
+narratives (from `attack-simulator`) and remediation drafts (from
+`fix-publisher`). Those sibling packages are imported lazily and only
+when the caller provides their JSON paths — the v1 report code path is
+unchanged, and running the analyzer without the siblings installed still
+works.
 """
 
 from __future__ import annotations
 
 import html
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,20 +34,37 @@ _VERDICT_BADGE_CLASS = {
 }
 
 _SECTION_MARKER = "<!-- exposure-analyzer:verdicts -->"
+_ATTACK_MARKER = "<!-- exposure-analyzer:attack-narratives -->"
+_REMEDIATION_MARKER = "<!-- exposure-analyzer:remediations -->"
+
+# Sibling package roots (siblings of exposure-analyzer/ under the repo root).
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # exposure_analyzer/ → exposure-analyzer/ → repo/
+_ATTACK_SIMULATOR_ROOT = _REPO_ROOT / "attack-simulator"
+_FIX_PUBLISHER_ROOT = _REPO_ROOT / "fix-publisher"
 
 
 def append_verdicts_to_report(
     verdicts: list[Verdict],
     html_report_path: Path,
+    *,
+    attack_narratives_path: Path | None = None,
+    remediations_path: Path | None = None,
 ) -> None:
-    """Insert (or replace) a verdicts section in a host-scanner HTML report.
+    """Insert (or replace) analyzer + optional attack + remediation sections.
 
-    Reads the file, removes any previously-inserted verdicts block (marked by
-    `_SECTION_MARKER`), inserts a fresh one before the closing `</body>` tag,
-    and writes the file back atomically.
+    Reads the report file, strips any previously-inserted verdicts /
+    attack / remediation blocks (each with its own marker), inserts fresh
+    ones before the closing `</body>` tag, and writes the file back.
+
+    `attack_narratives_path` / `remediations_path` are optional. When
+    provided, this function lazily imports the sibling packages
+    (attack-simulator / fix-publisher) — adding their roots to sys.path
+    if needed — loads the JSON, and renders each section via the
+    sibling's own `render_html_section`. When omitted, the v1 code path
+    runs unchanged.
 
     Raises:
-        FileNotFoundError: if the report file does not exist yet.
+        FileNotFoundError: if the base report file doesn't exist yet.
     """
     path = Path(html_report_path)
     if not path.exists():
@@ -48,17 +73,82 @@ def append_verdicts_to_report(
             "Run host-scanner first, then re-invoke exposure-analyzer."
         )
 
+    attack_section = _load_attack_section(attack_narratives_path)
+    remediation_section = _load_remediation_section(remediations_path)
+
     original = path.read_text(encoding="utf-8")
-    stripped = _strip_existing_section(original)
-    section = _render_verdicts_section(verdicts)
+    stripped = _strip_all_sections(original)
+    verdicts_section = _render_verdicts_section(verdicts)
+
+    insert = verdicts_section
+    if attack_section:
+        insert += "\n" + attack_section
+    if remediation_section:
+        insert += "\n" + remediation_section
 
     if "</body>" in stripped:
-        updated = stripped.replace("</body>", section + "\n</body>", 1)
+        updated = stripped.replace("</body>", insert + "\n</body>", 1)
     else:
-        # Report has no </body> — append at end so we still emit something usable.
-        updated = stripped + "\n" + section + "\n"
+        updated = stripped + "\n" + insert + "\n"
 
     path.write_text(updated, encoding="utf-8")
+
+
+def _ensure_sibling_on_path(sibling_root: Path) -> None:
+    """Add a sibling package root to sys.path if not already present."""
+    p = str(sibling_root)
+    if sibling_root.exists() and p not in sys.path:
+        sys.path.insert(0, p)
+
+
+def _load_attack_section(path: Path | None) -> str:
+    """Load attack narratives from disk and render as HTML. Empty if no path."""
+    if path is None:
+        return ""
+    _ensure_sibling_on_path(_ATTACK_SIMULATOR_ROOT)
+    try:
+        from attack_simulator import load_narratives, render_html_section  # type: ignore
+    except ImportError as e:  # pragma: no cover -- lazy import path
+        raise RuntimeError(
+            f"--attack-narratives given but attack-simulator package not importable. "
+            f"Expected at {_ATTACK_SIMULATOR_ROOT}. "
+            f"Original error: {e}"
+        ) from e
+
+    narratives = load_narratives(path)
+    # Peek generated_at from the JSON payload for the scope line.
+    generated_at = _peek_generated_at(path)
+    return render_html_section(narratives, generated_at=generated_at)
+
+
+def _load_remediation_section(path: Path | None) -> str:
+    """Load remediations from disk and render as HTML. Empty if no path."""
+    if path is None:
+        return ""
+    _ensure_sibling_on_path(_FIX_PUBLISHER_ROOT)
+    try:
+        from fix_publisher import load_remediations, render_html_section  # type: ignore
+    except ImportError as e:  # pragma: no cover -- lazy import path
+        raise RuntimeError(
+            f"--remediations given but fix-publisher package not importable. "
+            f"Expected at {_FIX_PUBLISHER_ROOT}. "
+            f"Original error: {e}"
+        ) from e
+
+    rems = load_remediations(path)
+    generated_at = _peek_generated_at(path)
+    return render_html_section(rems, generated_at=generated_at)
+
+
+def _peek_generated_at(path: Path) -> str:
+    """Best-effort extraction of `generated_at` from a sibling JSON payload."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return str(data.get("generated_at", ""))
+    except Exception:  # pragma: no cover -- defensive
+        return ""
+    return ""
 
 
 def render_verdicts_summary(verdicts: list[Verdict]) -> str:
@@ -73,10 +163,25 @@ def render_verdicts_summary(verdicts: list[Verdict]) -> str:
 
 def _strip_existing_section(doc: str) -> str:
     """Remove a previously-inserted verdicts block, if present."""
-    start = doc.find(_SECTION_MARKER)
+    return _strip_marked_block(doc, _SECTION_MARKER)
+
+
+def _strip_all_sections(doc: str) -> str:
+    """Strip verdicts, attack, and remediation blocks from prior runs.
+
+    Applied in that order so each strip pass sees a stable document. All
+    three markers use the same "start / start + ' end'" convention.
+    """
+    for marker in (_SECTION_MARKER, _ATTACK_MARKER, _REMEDIATION_MARKER):
+        doc = _strip_marked_block(doc, marker)
+    return doc
+
+
+def _strip_marked_block(doc: str, marker: str) -> str:
+    start = doc.find(marker)
     if start == -1:
         return doc
-    end_marker = _SECTION_MARKER + " end"
+    end_marker = marker + " end"
     end = doc.find(end_marker, start)
     if end == -1:
         return doc
@@ -158,6 +263,34 @@ def _render_evidence(v: Verdict) -> str:
         parts.append(
             f'<div class="muted" style="font-family:monospace; font-size:0.75rem; '
             f'margin-top:0.35rem;">$ {html.escape(v.probe_command)}</div>'
+        )
+    # v2-7/v2-8: surface LLM-proposed probes. When probe_command is set the
+    # proposal was approved (HITL or auto-approve) and executed; the argv is
+    # already shown above via probe_command, so we only add a small "(LLM-
+    # proposed, operator-approved)" attribution line. When probe_command is
+    # empty the proposal was not executed — show the argv with a "not executed"
+    # label so a reviewer sees what the analyzer would have wanted to run.
+    if v.proposed_probe:
+        pp = v.proposed_probe
+        argv_display = " ".join(
+            [str(pp.get("binary", ""))] + [str(a) for a in pp.get("args", [])]
+        ).strip()
+        if v.probe_command:
+            parts.append(
+                f'<div class="muted" style="font-size:0.7rem; margin-top:0.15rem; '
+                f'color:#94a3b8;">↑ LLM-proposed probe, operator-approved</div>'
+            )
+        else:
+            parts.append(
+                f'<div class="muted" style="font-family:monospace; font-size:0.75rem; '
+                f'margin-top:0.35rem; color:#fbbf24;">'
+                f'proposed (not executed): {html.escape(argv_display) or "—"}'
+                f'</div>'
+            )
+    if v.probe_proposal_error:
+        parts.append(
+            f'<div class="muted" style="font-size:0.75rem; margin-top:0.35rem; '
+            f'color:#f87171;">proposal rejected: {html.escape(v.probe_proposal_error)}</div>'
         )
     if not parts:
         return '<span class="muted">—</span>'

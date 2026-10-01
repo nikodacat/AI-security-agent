@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nikodacat/AI-security-agent/blob/v2-dev/docs/schemas/network_state.schema.json",
+  "title": "network_state.json",
+  "description": "External-attacker view of one or more targets, produced by network-prober/ and consumed by exposure-analyzer/. See docs/DESIGN.md §1.4.2 for the contract rationale. Flat per-(target,port) list, JSONL-friendly for large scans (each element is a self-contained record).",
+  "type": "array",
+  "items": { "$ref": "#/$defs/PortObservation" },
+  "$defs": {
+    "PortObservation": {
+      "type": "object",
+      "required": ["target", "port", "protocol", "reachable"],
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The hostname or IP the prober was invoked against, as-given (no reverse-DNS rewriting). E.g. 'db-exposed' inside the eval compose network, 'server.example.com' or '10.0.0.42' in production."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["tcp", "udp"]
+        },
+        "reachable": {
+          "type": "boolean",
+          "description": "True iff the prober received a response consistent with an open port (TCP handshake completed, UDP got an application-level reply). 'filtered' / 'closed' / 'no reply' all map to false; the distinction is not preserved because the analyzer does not need it."
+        },
+        "banner": {
+          "type": "string",
+          "description": "Raw fingerprint string as returned by the prober (nmap -sV service line, TLS server-hello product, or a stripped protocol-level banner). Preserved verbatim so the analyzer prompt can reason about it even when service_guess is absent. Absent iff reachable is false or the prober got no banner."
+        },
+        "service_guess": {
+          "type": "object",
+          "required": ["vendor", "product", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "vendor": { "type": "string", "minLength": 1 },
+            "product": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 }
+          },
+          "description": "Parsed by the banner-parser table. Absent when the banner is missing or the parser has no rule for it. The raw 'banner' field is the fallback in that case."
+        }
+      }
+    }
+  }
+}

@@ -78,6 +78,198 @@ The v1 → v2 transition is the shift from "authorized-insider audit" to
 "insider-plus-outsider gray-box pentest." The v1 pipeline stays intact and becomes
 the insider leg of the v2 gray-box workflow.
 
+### 1.4 v2 architecture (locked 2026-09-21)
+
+The §1.3 sketch names the four modules; this section pins down the trust
+topology, data contracts, and module layout that the v2 build (see
+`PROJECT_STATE.md § Roadmap → v2`) will follow. All decisions here came out of
+the 2026-09-21 design-review + grill-me session and are cross-referenced from the
+decisions log entry of that date.
+
+#### 1.4.1 Trust topology — all-on-coordinator
+
+The v2 topology has a **coordinator** and one or more **targets**, and the
+coordinator holds everything sensitive:
+
+- **On the coordinator:** Claude API key (via subscription-backed CLI), KEV/NVD
+  cache, `KNOWN_PROBES`, `learned_probes.jsonl`, the analyzer loop, the
+  attack-simulator and fix-publisher packages, and all report output.
+- **On the target:** shell access (ssh in production; `docker exec` in
+  eval-lab) and whatever external ports it already exposes. Nothing else.
+
+This formalizes what v1 already did operationally — the analyzer never lived
+on the target — and rules out target-side compromise leaking the API key or
+tampering with the learned-probe log. In eval-lab the coordinator is the new
+`eval-attacker` container attached to the compose network (see chunk `v2-3`);
+in production the coordinator is the operator's laptop and `run_full_scan.sh
+--prober-host user@host` wraps ssh+rsync to reach targets.
+
+#### 1.4.2 Data contract — `network_state.json`
+
+The prober's output is a **flat per-target list** rather than a nested
+per-service tree. Each entry carries:
+
+- `target` (hostname or IP), `port`, `protocol`, `reachable` (bool)
+- `banner` — raw string, preserved verbatim as fallback for the analyzer prompt
+- `service_guess` — parsed sub-object `{vendor, product, version}` when the
+  banner-parser table can identify it; absent otherwise
+
+Flat + JSONL-friendly so large scans stream without loading the whole file into
+memory. `banner` is never dropped even when `service_guess` succeeds — the LLM
+still gets to reason about the raw string. Schema + hand-crafted fixture land
+in chunk `v2-2`.
+
+#### 1.4.3 Cross-host transport — always a local file read
+
+The analyzer never speaks a network protocol to the prober. In both
+environments it reads `network_state.json` **as a local file** on the
+coordinator:
+
+- **Lab:** shared bind-mount volume in `docker-compose.yml` — the prober writes
+  into the mount, the analyzer reads out.
+- **Production:** the prober runs on the coordinator (or an operator-provided
+  host reached via `--prober-host user@host`, wrapping ssh+rsync); the file
+  ends up on the coordinator's local filesystem before the analyzer runs.
+
+Same contract either way, no code branch on environment.
+
+#### 1.4.4 Module layout — three new siblings, dynamic probes fold into analyzer
+
+Three new top-level packages sit alongside `host-scanner/`, `cve-matcher/`, and
+`exposure-analyzer/`:
+
+- `network-prober/` — external-leg scanner (chunk `v2-4`).
+- `attack-simulator/` — per-CONFIRMED-verdict LLM narrative generator
+  (chunk `v2-9`). Prompt-adapter fidelity only; no PentestGPT code vendored,
+  no tool execution.
+- `fix-publisher/` — per-CONFIRMED-verdict remediation drafter
+  (chunk `v2-10`). Emits an HTML section fragment for the main report **and** a
+  standalone `remediation.md`. Advisory only; no auto-execute.
+
+**Dynamic probe generation does *not* become its own package** — it folds into
+`exposure-analyzer/exposure_analyzer/` (chunks `v2-7` + `v2-8`). Reason: the
+HITL gate needs to run inside the analyzer's per-CVE loop and share its state
+with `KNOWN_PROBES`; splitting would create a circular import between analyzer
+and a probe-gen sibling.
+
+#### 1.4.5 Dynamic probes — `learned_probes.jsonl` + `sha256(argv_tuple)` identity
+
+`KNOWN_PROBES` stays the hand-reviewed baseline in code. Alongside it, a
+`learned_probes.jsonl` **sidecar** (append-only, git-tracked) holds every
+HITL-approved AI-proposed probe. At analyzer startup the sidecar merges into
+the runtime probe library; the on-disk file is never rewritten, only appended
+to.
+
+- **Probe shape:** structured `{binary, args[]}`, never a shell string. The
+  argv-list boundary is a hard security invariant, inherited from v1's
+  `ProbeTemplate` and enforced identically for LLM-proposed probes.
+- **Identity:** `sha256(argv_tuple)` — not CVE ID. Different argv against the
+  same CVE re-triggers HITL. This means renaming a flag counts as a new probe
+  and gets a fresh operator look.
+- **HITL flags — both, deliberately awkward-named:**
+  - `--auto-approve-known` — auto-approves argv-hash matches already in
+    `learned_probes.jsonl`. Intended for production reruns and eval scripts;
+    unseen probes still skip with `NO_EVIDENCE` verdict (they don't get
+    silently approved).
+  - `--auto-approve-all-unsafe` — bypasses the HITL gate entirely, including
+    for probes never seen before. Experimental / testing only. The awkward
+    name is intentional so eval scripts don't reach for it out of muscle
+    memory.
+
+The append-only JSONL is also a **report artifact**: chapter 5 can cite the
+"evolution of the probe library" story directly from its diff.
+
+#### 1.4.6 attack-simulator and fix-publisher — both fan out from `verdicts.json`
+
+Neither module talks to the target and neither depends on the other. Both
+consume `verdicts.json` produced by the analyzer, filter to `CONFIRMED`
+entries, and make one Claude call per verdict:
+
+- **attack-simulator** — outputs a text attack-path narrative (recon →
+  discovery → exploitation), placed into the HTML report as its own section.
+  No suggested attacker-tool invocations (no `nmap -sV`, no `sqlmap -u`);
+  advisor-fidelity only.
+- **fix-publisher** — outputs an apt-install block + config diff + service
+  restart directive per CONFIRMED. Written into both an HTML section and a
+  standalone `remediation.md` file that ops can hand off independently.
+
+Because they're independent post-processing, chunks `v2-9` and `v2-10` are
+fully parallelizable — the roadmap orders them for review clarity, not
+dependency.
+
+#### 1.4.7 Diagram
+
+```mermaid
+flowchart TB
+    subgraph COORD["coordinator host (operator laptop / eval-attacker container)"]
+        direction TB
+        NP["network-prober/<br/><i>external leg</i><br/>python-nmap · banner-grab · TLS handshake"]
+        HS["host-scanner/<br/><i>insider leg (v1)</i><br/>packages · configs · ports<br/>runs via ssh or docker exec"]
+        CM["cve-matcher/<br/>KEV alias + NVD version-range"]
+        EA["exposure-analyzer/<br/>Claude Agent SDK loop<br/>KNOWN_PROBES ⊕ learned_probes.jsonl<br/>dynamic probe proposal · HITL gate<br/>per-CVE verdict engine"]
+        AS["attack-simulator/<br/>per-CONFIRMED LLM call<br/>prompt-adapter fidelity<br/>text narrative"]
+        FP["fix-publisher/<br/>per-CONFIRMED apt+config+restart<br/>advisory drafts, no execute"]
+        LP[("learned_probes.jsonl<br/>append-only · git-tracked<br/>sha256(argv_tuple) identity")]
+        KEV[("CISA KEV<br/>daily cached")]
+        NVD[("NVD API<br/>30d cache")]
+        CC["Claude Code CLI<br/>subscription-backed"]
+    end
+
+    subgraph TGT["target host(s) — untrusted from the coordinator's POV"]
+        direction TB
+        T1["shell (ssh / docker exec)"]
+        T2["external ports (nmap surface)"]
+    end
+
+    subgraph EL["eval-lab/ (Docker Compose)"]
+        C1["eval-web-vuln"]
+        C2["eval-db-exposed"]
+        C3["eval-cms-plugin"]
+        BM[("shared bind-mount<br/>network_state.json drop")]
+    end
+
+    NP -->|"emits<br/>network_state.json"| EA
+    HS -->|"host_state.json"| CM
+    CM -->|"candidates.json"| EA
+    HS -->|"config + service context"| EA
+
+    LP -.->|"merge at startup"| EA
+    KEV -.-> CM
+    NVD -.-> CM
+    CC -.->|"probe + verdict reasoning"| EA
+    CC -.->|"attack narrative"| AS
+    CC -.->|"remediation drafting"| FP
+
+    EA -->|"verdicts.json"| AS
+    EA -->|"verdicts.json"| FP
+    EA -->|"report section"| RPT["HTML report + remediation.md"]
+    AS -->|"attack narrative section"| RPT
+    FP -->|"fix section + standalone .md"| RPT
+
+    EA -.->|"HITL-approved new probes"| LP
+
+    NP -.->|"probes (lab)"| T2
+    NP -.->|"probes (prod)"| T2
+    HS -.->|"reads inventory"| T1
+
+    T1 -.->|"docker exec (lab)"| C1
+    T1 -.->|"docker exec (lab)"| C2
+    T1 -.->|"docker exec (lab)"| C3
+    T2 -.->|"maps to container ports"| C1
+    T2 -.->|"maps to container ports"| C2
+    T2 -.->|"maps to container ports"| C3
+    NP -.->|"file drop"| BM
+    BM -.->|"read as local file"| EA
+
+    style COORD fill:#f5f5ff,stroke:#446
+    style TGT fill:#fff5f5,stroke:#844
+    style EL stroke-dasharray: 3 3
+```
+
+Source of truth for the diagram lives at `docs/diagrams/v2-architecture.mmd`.
+If the architecture changes, update the `.mmd` file first, then re-paste into
+this section — don't diverge them silently.
+
 ---
 
 ## 2. Decision tree (from grill-me session)
@@ -210,17 +402,26 @@ Dashed boxes = v2 (skeletons only in v1 build). Solid boxes = v1 must-work by de
 
 ---
 
-## 4. v2 roadmap (post-defense)
+## 4. v2 roadmap
 
-- **`attack-simulator/`** — full PentestGPT+Claude bridge (Path C). Feeds off host-scanner
-  + cve-matcher output; produces attacker-perspective "here's what a real attacker would
-  chain together" report alongside the blue-team one.
-- **`fix-publisher/`** — generates concrete remediation commands per verified CVE (patch
-  install, config change, service restart) and optionally applies them under human
-  approval. Closes the loop: assessment → verification → remediation.
-- **RPM/Fedora inventory support** in host-scanner.
-- **External `nmap -sV` → CVE bridge** for scanning targets the agent can't get shell on.
-- **Web dashboard polish** — live progress view during a scan.
+v2 is under active build (locked 2026-09-21) on the `v2-dev` branch — not
+post-defense any more. The authoritative sources are:
+
+- **Architecture:** §1.4 above (trust topology, data contracts, module layout,
+  dynamic probes, attack-sim + fix-publisher fan-out).
+- **Chunk sequence + status:** `PROJECT_STATE.md § Roadmap → v2` (14 chunks
+  `v2-1` through `v2-14`, ordered by dependency + hardest-first risk).
+- **Design decisions:** `PROJECT_STATE.md § Decisions log` entry 2026-09-21.
+
+Items still deferred beyond v2 (kept here so they're not lost):
+
+- **RPM/Fedora inventory support** in host-scanner — v2 keeps `apt`-only.
+- **Attack-simulator with real tool execution** (PentestGPT vendored, live-fire
+  attack chains) — v3 direction, with the ethics/legal + kill-switch layers
+  logged in the 2026-09-21 v3 forward-look entry.
+- **Auto-executing fix-publisher** (rollback machinery, per-target dry-run
+  matrix) — v3 stretch.
+- **Web dashboard polish** — no dashboard in v2; HTML report only.
 
 ---
 

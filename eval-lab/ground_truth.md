@@ -1,31 +1,37 @@
 # eval-lab — Ground Truth
 
 **Committed 2026-08-05 (original 17 entries, aspirational).**
-**Revised 2026-08-10 (added v1-scored scope, 7 entries).**
+**Revised 2026-08-10 (added v1-scored scope, 7 entries; total 7 scored + 17 unscored).**
+**Revised 2026-09-21 (v2-6 widening — all 24 entries now scored under v2 capabilities).**
 No back-fitting: entries here reflect what a security-competent human should
 conclude from the container's software + config, deciding the verdict *from
 first principles* rather than from what the analyzer happens to output.
 
 ---
 
-## Two-tier structure
+## Two-tier structure (history)
 
-This document defines ground truth at two scopes:
+This document originally defined ground truth at two scopes:
 
-- **§ Scoring scope (v1)** — 7 CVEs the *current pipeline* actually surfaces
+- **§ Scoring scope (v1)** — 7 CVEs the v1 pipeline actually surfaced
   (KEV catalog ∩ dpkg-installed packages ∩ these three containers).
-  `run_eval.py` scores only these. Every entry is a patched-package CVE, so
-  the correct verdict is `MITIGATED_BY_CONFIG` — this measures whether the
-  analyzer reliably recognizes patched software as such.
+  Every entry is a patched-package CVE, so the correct verdict is
+  `MITIGATED_BY_CONFIG` — this measures whether the analyzer reliably
+  recognizes patched software as such.
 - **§ Aspirational ground truth (v2 coverage targets)** — the original 17
   entries covering banner-detected Apache, source-built httpd, non-dpkg
-  log4j, absent SSH, and unauthenticated Redis. Documented here as the
-  full coverage target; NOT scored by `run_eval.py` today because
-  cve-matcher's KEV+dpkg substrate cannot see them. Fixing that is a v2
-  concern (scanner-widening chunk).
+  log4j, absent SSH, and unauthenticated Redis. Not scoreable by v1
+  because cve-matcher's KEV+dpkg substrate could not see them.
+
+**As of v2-6 (2026-09-21) both tiers are scored by `run_eval.py`.** v2's
+external network-prober, banner-based probe library, and host-scanner
+substrate collectively surface the 17 previously-aspirational entries.
+The section split below is preserved for history (it shows *why* v1
+couldn't score them); scoring now reads the full 24 entries from
+`ground_truth.yaml` (version 3, scoring_scope `v2-with-external-prober`).
 
 The two tiers together give the report an honest coverage picture: "here
-is what we score, here is what we don't yet cover, here's why."
+is what v1 scored, here is what v2 added, here's why the gap existed."
 
 ---
 
@@ -62,17 +68,21 @@ Every installed version is post-fix, so the schema-correct verdict is
 
 ---
 
-## Aspirational ground truth (v2 coverage targets)
+## Aspirational ground truth (now v2-scored as of 2026-09-21)
 
 Everything below is the *original* 17-entry ground truth committed 2026-08-05.
 These CVEs are what a security-competent human should flag when looking at the
-containers, but they fall outside the current pipeline's KEV+dpkg substrate:
+containers, but they fell outside the v1 pipeline's KEV+dpkg substrate:
 Apache 2.4.49 is built from source (not dpkg), log4j is a jar file (not dpkg),
 `CVE-2022-0778` isn't in KEV (DoS-only), and OpenSSH isn't installed at all.
 
-`run_eval.py` does not score these entries today. They will move into the
-scored scope once a scanner-widening chunk (banner-grab probe, service
-enumeration, non-dpkg package detection) lands.
+**As of v2-6 (2026-09-21) these 17 entries ARE scored by `run_eval.py`** —
+v2 supplies the substrate that v1 lacked (banner-based analyzer probes for
+Apache/Redis, filesystem-existence probes for log4j and SSH absence, and
+external reachability data from `network-prober`). SSH-absence rows use
+`NO_EVIDENCE` per the 2026-08-05 revision-log decision (a `ssh -V`
+not-found is not positive absence proof; a stronger dpkg + filesystem
+negative probe would justify `NOT_RUNNING`).
 
 Each row: **CVE**, **software affected**, **version present**, **detectable
 via** (what evidence a scanner needs to gather), **expected verdict** (one of
@@ -162,16 +172,22 @@ scope note: the container name "cms-plugin" doesn't match its content.
 
 ## Aggregate
 
-**18 CVE ground-truth entries** across 3 containers. Breakdown by expected
-verdict:
+**24 scored CVE ground-truth entries** across 3 containers (7 v1-scored +
+17 v2-6-added; two aspirational-doc rows without CVE IDs — the Redis
+exposure marker and the empty wp-plugins entry — are intentionally not
+scored). Breakdown by expected verdict:
 
 | Verdict                  | Count |
 |--------------------------|------:|
 | CONFIRMED                | 7     |
-| MITIGATED_BY_CONFIG      | 6     |
+| MITIGATED_BY_CONFIG      | 13    |
 | MITIGATED_BY_EXPOSURE    | 0     |
-| NOT_RUNNING              | 5     |
-| NO_EVIDENCE              | 0     |
+| NOT_RUNNING              | 1     |
+| NO_EVIDENCE              | 3     |
+
+Per-container: eval-web-vuln 8, eval-db-exposed 7, eval-cms-plugin 9.
+Distinct CVE IDs: 14 (several appear across containers with different
+installed versions → different verdicts, which is the point).
 
 ## Handoff to chunk E (probe library)
 
@@ -203,6 +219,23 @@ To exercise this ground truth end-to-end, chunk E needs at minimum:
 
 ## Revision log
 
+- **2026-09-21: v2-6 widening (all 24 entries scored).** `ground_truth.yaml`
+  bumped to version 3 with `scoring_scope: v2-with-external-prober`. The 17
+  previously-aspirational entries are now mechanically extracted into the
+  YAML (see the tables above for the source rationale). Two aspirational-doc
+  rows that carry no CVE ID stay out of scoring: the Redis unauth-exposure
+  marker on `eval-db-exposed` (an exposure-only finding, not a CVE) and the
+  empty `wp-content/plugins/` entry on `eval-cms-plugin` (a scope note, not
+  a CVE). Detection-basis is captured per row as `dpkg` / `banner` /
+  `probe-fs` (analyzer probe library) — a new column, forward-compatible
+  with `run_eval.py` which only reads `cve_id` + `expected`. SSH-absence
+  entries (3 rows) use `NO_EVIDENCE` per the 2026-08-05 pending decision.
+  Aggregate flip: was 7 scored / 17 unscored, now 24 scored. **Motivation:**
+  v2-5 landed the analyzer-side network_state.json consumption, so the
+  scoring substrate can finally see reachability + banners; keeping the
+  aspirational tier unscored would understate what v2-13's full eval run
+  actually measures. This is the promised widening from § v2 Spec success
+  criterion #1 (7 → 24 entries).
 - **2026-08-10: v2 rescope (Path A).** Split ground truth into "v1 scored"
   and "aspirational v2 targets" tiers. The v1 scored tier contains the 7
   KEV+dpkg CVEs cve-matcher actually surfaces against these containers

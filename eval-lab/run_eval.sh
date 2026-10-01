@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# Iterate the full pipeline across every container in ground_truth.yaml
+# and diff results against ground truth.
+#
+# Usage: ./run_eval.sh [--engine=claude|fake] [--reuse-existing] [--v2]
+#                       [--containers=eval-web-vuln,eval-db-exposed]
+#
+# --v2 turns on the full v2 pipeline (network-prober + attack-simulator +
+# fix-publisher + merged report) per container.
 # Full eval: iterate the pipeline over every container in ground_truth.yaml,
 # diff verdicts, write eval_results.csv + eval_summary.md.
 #

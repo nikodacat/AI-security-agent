@@ -15,10 +15,20 @@ import re
 import shlex
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Protocol
 
+from .hitl import (
+    ApprovalGate,
+    Decision,
+    append_learned_probe,
+    argv_hash,
+    build_probe_argv,
+    make_learned_record,
+)
 from .probes import ProbeTemplate, lookup_probe
 from .prompts import SYSTEM_PROMPT, build_verdict_prompt
+from .proposal import ProbeProposer, ProposalValidationError, parse_proposal
 from .verdicts import Verdict, VerdictType
 
 
@@ -72,29 +82,75 @@ class ExposureAgent:
         verdict_fn: VerdictFn,
         config: AgentConfig | None = None,
         probe_runner: ProbeRunner | None = None,
+        probe_proposer: ProbeProposer | None = None,
+        approval_gate: ApprovalGate | None = None,
+        learned_probes_path: Path | None = None,
+        target_container: str | None = None,
     ) -> None:
         self.verdict_fn = verdict_fn
         self.config = config or AgentConfig()
         self.probe_runner = probe_runner or _default_probe_runner(self.config)
+        self.probe_proposer = probe_proposer
+        self.approval_gate = approval_gate
+        self.learned_probes_path = learned_probes_path
+        self.target_container = target_container
 
     async def analyze(
         self,
         candidate: dict[str, Any],
         host_state: dict[str, Any],
+        network_state: list[dict[str, Any]] | None = None,
     ) -> Verdict:
-        """Produce a verdict for a single CVE candidate."""
+        """Produce a verdict for a single CVE candidate.
+
+        ``network_state`` (v2 addition): list of PortObservation dicts from
+        network-prober conforming to docs/schemas/network_state.schema.json.
+        None (default) preserves v1 behavior — the prompt omits the
+        External-attacker view entirely, so v1-vs-v2 verdict-delta baselines
+        are directly comparable by just running the analyzer twice with and
+        without the argument.
+        """
         cve_id = candidate.get("cve_id", "CVE-UNKNOWN")
         template = lookup_probe(cve_id) if self.config.run_probes else None
 
         probe_command, probe_output = ("", "")
+        proposed_probe: dict[str, Any] | None = None
+        probe_proposal_error: str = ""
+
         if template is not None:
             probe_command, probe_output = self.probe_runner(template)
+        elif self.probe_proposer is not None and self.config.run_probes:
+            try:
+                raw_proposal = await self.probe_proposer(candidate, host_state)
+                probe = parse_proposal(raw_proposal)
+                proposed_probe = probe.to_dict()
+                if self.approval_gate is not None:
+                    decision, approved_by = self.approval_gate.decide(probe, cve_id)
+                    if decision == Decision.APPROVE:
+                        argv = build_probe_argv(probe, self.target_container)
+                        display_cmd = " ".join([probe.binary, *probe.args])
+                        probe_command, probe_output = _run_argv(
+                            argv, display_cmd=display_cmd, config=self.config
+                        )
+                        h = argv_hash(probe.binary, probe.args)
+                        if (
+                            self.learned_probes_path is not None
+                            and h not in self.approval_gate.learned
+                        ):
+                            rec = make_learned_record(probe, cve_id, approved_by)
+                            append_learned_probe(self.learned_probes_path, rec)
+                            self.approval_gate.learned[h] = rec
+            except ProposalValidationError as e:
+                probe_proposal_error = str(e)
+            except Exception as e:
+                probe_proposal_error = str(e) or type(e).__name__
 
         user_prompt = build_verdict_prompt(
             candidate,
             host_state,
             probe_command=probe_command,
             probe_output=probe_output,
+            network_state=network_state,
         )
 
         raw = await self.verdict_fn(SYSTEM_PROMPT, user_prompt)
@@ -107,17 +163,27 @@ class ExposureAgent:
             evidence=parsed.get("evidence", {}),
             probe_command=probe_command,
             probe_output=probe_output,
+            proposed_probe=proposed_probe,
+            probe_proposal_error=probe_proposal_error,
         )
 
     async def analyze_batch(
         self,
         candidates: list[dict[str, Any]],
         host_state: dict[str, Any],
+        network_state: list[dict[str, Any]] | None = None,
     ) -> list[Verdict]:
-        """Analyze many candidates serially (subscription rate limits)."""
+        """Analyze many candidates serially (subscription rate limits).
+
+        ``network_state`` is passed through unchanged to every candidate's
+        :meth:`analyze` call — the filtering to "observations relevant to
+        this CVE" happens inside :func:`prompts.build_verdict_prompt`.
+        """
         results: list[Verdict] = []
         for cand in candidates:
-            results.append(await self.analyze(cand, host_state))
+            results.append(
+                await self.analyze(cand, host_state, network_state=network_state)
+            )
         return results
 
 

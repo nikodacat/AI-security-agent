@@ -49,6 +49,19 @@ services:
     volumes:
       - scan_output:/scan-output
 
+  # eval-attacker: coordinator-side box for network-prober / analyzer / attack-simulator / fix-publisher. Runs on the evallab network so it can nmap the other three by hostname.
+  eval-attacker:
+    build:
+      context: ..
+      dockerfile: eval-lab/dockerfiles/attacker.Dockerfile
+    container_name: eval-attacker
+    hostname: eval-attacker
+    networks: [evallab]
+    depends_on: [web-vuln, db-exposed, cms-plugin]
+    volumes:
+      - ./prober-output:/prober-output       # host bind-mount, prober writes network_state.json here
+      - ../:/repo:ro                          # read-only whole-repo view so v2-4 can pip install / import our package
+
 networks:
   evallab:
     driver: bridge
