@@ -83,6 +83,10 @@ __pycache__/
 .eggs/
 dist/
 build/
+
+# target-agent PyInstaller artifacts: binary output + spec work dir
+target-agent/dist/
+target-agent/build/
 .pip-cache/
 pip-wheel-metadata/
 .pytest_cache/

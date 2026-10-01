@@ -39,8 +39,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 from .base import BaseScanner, IS_LINUX, IS_WINDOWS
 
 
@@ -191,6 +189,7 @@ $apps | ConvertTo-Json -Depth 2
             if not keyword:
                 continue
             try:
+                import httpx
                 resp = httpx.get(
                     api_url,
                     params={"keywordSearch": keyword, "resultsPerPage": max_per_app},
