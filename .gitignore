@@ -112,6 +112,22 @@ cve-matcher/reports/
 # the operator's own machine — contains hostnames, package inventories,
 # NVD lookups. Regenerated on demand; never commit.
 scan-results/
+
+# eval-lab/scan-output/ accumulates per-container host-scanner JSON dumps
+# produced during dev. A few early samples are committed as reference
+# artifacts (eval-{web-vuln,db-exposed,cms-plugin,web-vuln}.host.json);
+# future dumps should be local-only. Match everything NEW; already-tracked
+# files remain tracked.
+eval-lab/scan-output/*.json
+!eval-lab/scan-output/eval-web-vuln.host.json
+!eval-lab/scan-output/eval-db-exposed.host.json
+!eval-lab/scan-output/eval-cms-plugin.host.json
+!eval-lab/scan-output/web-vuln.host.json
+
+# learned_probes.jsonl is per-operator state. Starter sidecars should be
+# committed when hand-curated; runtime-grown ones should not. Allow a
+# committed starter at exposure-analyzer/learned_probes.jsonl.
+**/learned_probes.jsonl.local
 **/scan-results/
 
 # eval-lab/prober-output/ is the host bind-mount for eval-attacker's

