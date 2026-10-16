@@ -161,7 +161,7 @@ class HtmlSectionTests(unittest.TestCase):
     def test_section_wrapped_in_markers(self) -> None:
         html = render_html_section([self._sample()])
         self.assertTrue(html.startswith(SECTION_MARKER))
-        self.assertIn(SECTION_MARKER + " end", html)
+        self.assertIn(SECTION_MARKER.replace("-->", "end -->"), html)
 
     def test_uses_host_scanner_card_class(self) -> None:
         html = render_html_section([self._sample()])

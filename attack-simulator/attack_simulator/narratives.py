@@ -211,7 +211,7 @@ def render_html_section(
             parts.append(_render_narrative_block(n))
 
     parts.append("  </div>")
-    parts.append(f"{SECTION_MARKER} end")
+    parts.append(SECTION_MARKER.replace("-->", "end -->"))
     return "\n".join(parts)
 
 
@@ -238,8 +238,8 @@ def _render_narrative_block(n: Narrative) -> str:
     if n.source_verdict_reason:
         verdict_html = (
             '<blockquote style="margin:0.5rem 0;padding:0.5rem 0.75rem;'
-            'border-left:3px solid #64748b;background:#f8fafc;'
-            'font-size:0.9em;color:#334155;">'
+            'border-left:3px solid #38bdf8;background:#263044;'
+            'font-size:0.9em;color:#cbd5e1;">'
             f'<strong>Analyzer verdict:</strong> {html.escape(n.source_verdict_reason)}'
             "</blockquote>"
         )
@@ -248,7 +248,7 @@ def _render_narrative_block(n: Narrative) -> str:
 
     return (
         '    <div style="margin:1rem 0;padding:0.75rem 1rem;'
-        'border:1px solid #e2e8f0;border-radius:6px;">\n'
+        'border:1px solid #334155;border-radius:6px;background:#1e293b;">\n'
         f"      <h3 style=\"margin-top:0;\">{heading}</h3>\n"
         f"      {meta_html}\n"
         f"      {verdict_html}\n"

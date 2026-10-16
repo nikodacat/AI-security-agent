@@ -370,17 +370,17 @@ class TestSiblingSectionInjection(unittest.TestCase):
                     remediations_path=remediations,
                 )
             html = report.read_text(encoding="utf-8")
-            # Each block has a start marker AND an "end" marker that begins
-            # with the start marker as a prefix, so plain .count() returns 2
-            # per block. After N idempotent re-injections we still want 1
-            # block per section — count == 2.
-            self.assertEqual(html.count("<!-- exposure-analyzer:verdicts -->"), 2)
-            self.assertEqual(html.count("<!-- exposure-analyzer:attack-narratives -->"), 2)
-            self.assertEqual(html.count("<!-- exposure-analyzer:remediations -->"), 2)
-            # And an "end" marker appears exactly once per block.
-            self.assertEqual(html.count("<!-- exposure-analyzer:verdicts --> end"), 1)
-            self.assertEqual(html.count("<!-- exposure-analyzer:attack-narratives --> end"), 1)
-            self.assertEqual(html.count("<!-- exposure-analyzer:remediations --> end"), 1)
+            # Each block has one start marker (`<!-- ns -->`) and one end
+            # marker (`<!-- ns end -->`, "end" inside the comment so it
+            # never renders as stray visible text). The two strings don't
+            # share a substring relationship, so each should appear exactly
+            # once per block after N idempotent re-injections.
+            self.assertEqual(html.count("<!-- exposure-analyzer:verdicts -->"), 1)
+            self.assertEqual(html.count("<!-- exposure-analyzer:attack-narratives -->"), 1)
+            self.assertEqual(html.count("<!-- exposure-analyzer:remediations -->"), 1)
+            self.assertEqual(html.count("<!-- exposure-analyzer:verdicts end -->"), 1)
+            self.assertEqual(html.count("<!-- exposure-analyzer:attack-narratives end -->"), 1)
+            self.assertEqual(html.count("<!-- exposure-analyzer:remediations end -->"), 1)
 
     def test_no_sibling_paths_leaves_original_v1_behavior(self):
         """Not passing sibling paths should be identical to v1 behavior."""
