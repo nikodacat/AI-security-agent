@@ -118,6 +118,47 @@ class TestLog4jProbe(unittest.TestCase):
             self.assertNotRegex(path, combined, f"{path} should not match")
 
 
+class TestEvalCmsPluginProbes(unittest.TestCase):
+    """Signals for the OpenSSL / bash / ghostscript / Apache-proxy probes."""
+
+    def _hits(self, cve_id: str, output: str) -> bool:
+        return any(re.search(p, output, re.M) for p in KNOWN_PROBES[cve_id].expected_signals)
+
+    def test_heartbleed_only_matches_1_0_1_through_f(self):
+        self.assertTrue(self._hits("CVE-2014-0160", "OpenSSL 1.0.1f 6 Jan 2014"))
+        self.assertTrue(self._hits("CVE-2014-0160", "OpenSSL 1.0.1 14 Mar 2012"))
+        self.assertFalse(self._hits("CVE-2014-0160", "OpenSSL 1.0.1g 7 Apr 2014"))
+        self.assertFalse(self._hits("CVE-2014-0160", "OpenSSL 1.1.1d  10 Sep 2019"))
+
+    def test_shellshock_matches_only_when_marker_is_echoed(self):
+        self.assertTrue(self._hits("CVE-2014-6278", "SHELLSHOCK_VULNERABLE\nprobe_done"))
+        self.assertFalse(self._hits("CVE-2014-6278", "probe_done"))
+
+    def test_ghostscript_matches_before_9_21(self):
+        self.assertTrue(self._hits("CVE-2017-8291", "9.20\nghostscript\t9.20~dfsg-3"))
+        self.assertTrue(self._hits("CVE-2017-8291", "9.5"))
+        self.assertFalse(self._hits("CVE-2017-8291", "9.21"))
+        self.assertFalse(self._hits("CVE-2017-8291", "9.27"))
+
+    def test_openssl_0778_range(self):
+        self.assertTrue(self._hits("CVE-2022-0778", "OpenSSL 1.1.1m  14 Dec 2021"))
+        self.assertTrue(self._hits("CVE-2022-0778", "OpenSSL 1.1.1d  10 Sep 2019"))
+        self.assertFalse(self._hits("CVE-2022-0778", "OpenSSL 1.1.1n  15 Mar 2022"))
+        self.assertFalse(self._hits("CVE-2022-0778", "OpenSSL 3.0.2 15 Mar 2022"))
+
+    def test_openssl_3711_range(self):
+        self.assertTrue(self._hits("CVE-2021-3711", "OpenSSL 1.1.1k  25 Mar 2021"))
+        self.assertFalse(self._hits("CVE-2021-3711", "OpenSSL 1.1.1l  24 Aug 2021"))
+
+    def test_apache_proxy_matches_only_with_module_loaded(self):
+        self.assertTrue(self._hits("CVE-2021-40438", " proxy_module (shared)\nServer version: Apache/2.4.48"))
+        self.assertFalse(self._hits("CVE-2021-40438", "Server version: Apache/2.4.38 (Debian)"))
+
+    def test_apache_probes_fall_back_to_apache2_binary(self):
+        for cve in ("CVE-2021-42013", "CVE-2021-41773"):
+            self.assertIn("apache2 -v", KNOWN_PROBES[cve].command)
+
+
 class TestProbeLibraryContract(unittest.TestCase):
     """Whole-library invariants that catch drift when new probes are added."""
 

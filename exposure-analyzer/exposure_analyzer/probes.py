@@ -82,7 +82,8 @@ KNOWN_PROBES: dict[str, ProbeTemplate] = {
     # AND a permissive <Directory> for the traversal target; without those,
     # the file-read primitive still works but RCE does not.
     "CVE-2021-42013": ProbeTemplate(
-        command="httpd -v",
+        # `httpd` on upstream/Vulhub images, `apache2` on Debian/Ubuntu packages.
+        command="sh -c \"httpd -v 2>/dev/null || apache2 -v\"",
         expected_signals=[r"Apache/2\.4\.(49|50)"],
         interpretation_hint=(
             "Apache 2.4.49 and 2.4.50 are the only vulnerable versions; "
@@ -96,7 +97,7 @@ KNOWN_PROBES: dict[str, ProbeTemplate] = {
     # Affected: 2.4.49 only. Fixed in 2.4.50 but the fix was incomplete,
     # which is what CVE-2021-42013 exploits.
     "CVE-2021-41773": ProbeTemplate(
-        command="httpd -v",
+        command="sh -c \"httpd -v 2>/dev/null || apache2 -v\"",
         expected_signals=[r"Apache/2\.4\.49"],
         interpretation_hint=(
             "Only Apache 2.4.49 is vulnerable to CVE-2021-41773. If the "
@@ -139,6 +140,108 @@ KNOWN_PROBES: dict[str, ProbeTemplate] = {
             "2.0 through 2.14.x = CONFIRMED. 2.15+ has partial mitigations; "
             "2.17.1+ is fully patched. Java-only vulnerability -- if the "
             "target has no JVM, this CVE cannot apply."
+        ),
+    ),
+
+    # Heartbleed. Upstream OpenSSL 1.0.1 through 1.0.1f (and 1.0.2-beta) only;
+    # 1.0.0, 0.9.8 and everything from 1.0.1g / 1.0.2 / 1.1.x onward are
+    # unaffected. Output includes the distro package version because
+    # distros backport fixes without changing the upstream version string.
+    "CVE-2014-0160": ProbeTemplate(
+        command="sh -c \"openssl version; dpkg-query -W openssl libssl1.0.0 libssl1.1 2>/dev/null\"",
+        expected_signals=[r"OpenSSL 1\.0\.1[a-f]?\s"],
+        interpretation_hint=(
+            "Only OpenSSL 1.0.1 through 1.0.1f is affected (1.0.1g fixed it). "
+            "OpenSSL 1.0.0, 1.0.2 and any 1.1.x are not affected regardless "
+            "of patch level. On Debian/Ubuntu, a vulnerable upstream version "
+            "may carry a backported fix -- compare the dpkg package version "
+            "against the distro's fixed version before concluding."
+        ),
+    ),
+
+    # Shellshock family. Direct behavioural test: export a function-definition
+    # env var carrying a trailing command and see whether bash executes it.
+    # Only prints a marker string; touches nothing on disk.
+    "CVE-2014-6278": ProbeTemplate(
+        command="env x='() { :;}; echo SHELLSHOCK_VULNERABLE' bash -c 'echo probe_done'",
+        expected_signals=[r"SHELLSHOCK_VULNERABLE"],
+        interpretation_hint=(
+            "If SHELLSHOCK_VULNERABLE appears in the output, this bash "
+            "executes code after a function definition in an env var "
+            "(unpatched). Output of only 'probe_done' means this bash build "
+            "is patched. Even when the bash build is vulnerable, exploitation "
+            "also needs a network-facing component (CGI, DHCP client, "
+            "ForceCommand ssh, ...) that passes attacker-controlled data into "
+            "bash's environment -- check host_state / network_state for one "
+            "before returning CONFIRMED."
+        ),
+    ),
+
+    # Ghostscript -dSAFER bypass via type confusion (CVE-2017-8291, "Rubber
+    # Ducky"). Upstream fix is in 9.21; distros backport. Exploitation needs
+    # an attacker-supplied PostScript/EPS file to reach ghostscript, typically
+    # through ImageMagick, a PHP upload handler, or a document converter.
+    "CVE-2017-8291": ProbeTemplate(
+        command="sh -c \"gs --version; dpkg-query -W ghostscript 2>/dev/null\"",
+        expected_signals=[r"^(8\.|9\.([0-9]|1[0-9]|20)(\.|\s|$))"],
+        interpretation_hint=(
+            "Upstream versions before 9.21 are affected; 9.21+ is fixed. On "
+            "Debian/Ubuntu compare the package version against the distro "
+            "security fix. Presence of the binary alone is not exploitable: "
+            "something must hand untrusted PostScript/EPS to it -- check "
+            "host_state for ImageMagick, PHP upload handling, or other "
+            "converters. Binary absent (not found) means NOT_RUNNING."
+        ),
+    ),
+
+    # Apache mod_proxy SSRF via crafted request line (CVE-2021-40438).
+    # Affected httpd <= 2.4.48, and only when mod_proxy is actually loaded
+    # (and a ProxyPass / reverse-proxy rule uses a unix-socket-style target).
+    "CVE-2021-40438": ProbeTemplate(
+        command="sh -c \"(apache2ctl -M 2>&1 || httpd -M 2>&1) | grep -i proxy; apache2 -v 2>/dev/null || httpd -v\"",
+        expected_signals=[r"proxy_module"],
+        interpretation_hint=(
+            "The vulnerable range is httpd <= 2.4.48 (fixed in 2.4.49). "
+            "Look for 'proxy_module' in the loaded-module list: if no proxy "
+            "module line appears, mod_proxy is not loaded and the SSRF "
+            "primitive does not exist -> MITIGATED_BY_CONFIG regardless of "
+            "version. Version banner is printed on the last lines."
+        ),
+    ),
+
+    # OpenSSL BN_mod_sqrt() infinite loop (CVE-2022-0778). Affected upstream:
+    # 1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1. Fixed 1.1.1n / 3.0.2.
+    # DoS only (parsing a crafted certificate with explicit EC parameters).
+    "CVE-2022-0778": ProbeTemplate(
+        command="sh -c \"openssl version; dpkg-query -W openssl libssl1.1 libssl3 2>/dev/null\"",
+        expected_signals=[
+            r"OpenSSL 1\.0\.2[a-z]{0,2}\s",
+            r"OpenSSL 1\.1\.1[a-m]?\s",
+            r"OpenSSL 3\.0\.[01]\s",
+        ],
+        interpretation_hint=(
+            "Upstream-affected: 1.0.2 through 1.0.2zc, 1.1.1 through 1.1.1m, "
+            "3.0.0-3.0.1; fixed in 1.1.1n and 3.0.2. A bare '1.1.1' with no "
+            "letter or a letter <= m is in range. Debian/Ubuntu backport the "
+            "fix without bumping the upstream string -- compare the dpkg "
+            "package version to the distro's fixed version. Impact is denial "
+            "of service only (infinite loop while parsing a crafted cert)."
+        ),
+    ),
+
+    # OpenSSL SM2 decryption buffer overflow (CVE-2021-3711). Affected
+    # 1.1.1 through 1.1.1k; fixed in 1.1.1l. Only reachable if the
+    # application decrypts attacker-supplied SM2 ciphertext.
+    "CVE-2021-3711": ProbeTemplate(
+        command="sh -c \"openssl version; dpkg-query -W openssl libssl1.1 libssl3 2>/dev/null\"",
+        expected_signals=[r"OpenSSL 1\.1\.1[a-k]?\s"],
+        interpretation_hint=(
+            "Upstream-affected: 1.1.1 through 1.1.1k (1.1.1l fixed it); "
+            "1.0.2 and 3.x are not affected. Debian/Ubuntu backport the fix "
+            "without bumping the upstream string -- compare the dpkg package "
+            "version to the distro's fixed version. Practical exposure also "
+            "requires an application that performs SM2 decryption on "
+            "untrusted input, which is rare."
         ),
     ),
 }
