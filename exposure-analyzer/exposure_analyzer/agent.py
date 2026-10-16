@@ -339,6 +339,52 @@ def build_claude_verdict_fn() -> VerdictFn:
     return _call
 
 
+def build_openai_compatible_verdict_fn(
+    base_url: str,
+    model: str,
+    api_key: str | None = None,
+    timeout: float = 60.0,
+) -> VerdictFn:
+    """Return a VerdictFn backed by any OpenAI-compatible chat-completions
+    endpoint (llama-server, vLLM, LM Studio, Ollama's OpenAI shim, etc.).
+
+    Non-streaming: posts one request, returns ``choices[0].message.content``
+    whole. Used for the v3 "does scaffolding matter more with a weaker
+    backend" comparison — points this at a local model instead of Claude
+    while ExposureAgent's orchestration (probes, schema, HITL) is unchanged.
+
+    Deferred import mirrors build_claude_verdict_fn's pattern: httpx isn't
+    required on machines that only ever use the claude engine.
+    """
+    try:
+        import httpx  # type: ignore
+    except ImportError as e:  # pragma: no cover
+        raise RuntimeError(
+            "httpx is not installed. Install it with `pip install httpx`."
+        ) from e
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    async def _call(system_prompt: str, user_prompt: str) -> str:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "stream": False,
+        }
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(base_url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        return data["choices"][0]["message"]["content"]
+
+    return _call
+
+
 def _extract_text(msg: Any) -> str:  # pragma: no cover -- exercised only in live runs
     content = getattr(msg, "content", None)
     if isinstance(content, str):

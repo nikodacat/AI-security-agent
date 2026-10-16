@@ -13,6 +13,7 @@ from exposure_analyzer.agent import (
     AgentConfig,
     ExposureAgent,
     _parse_verdict_response,
+    build_openai_compatible_verdict_fn,
 )
 from exposure_analyzer.hitl import ApprovalGate, Decision, load_learned_probes
 from exposure_analyzer.probes import ProbeTemplate
@@ -525,6 +526,97 @@ class TestExposureAgentHITL(unittest.TestCase):
         self.assertIsNotNone(verdicts[0].proposed_probe)
         self.assertIsNotNone(verdicts[1].proposed_probe)
         mock_input.assert_called_once()
+
+
+class TestBuildOpenAICompatibleVerdictFn(unittest.TestCase):
+    def test_posts_messages_and_returns_content(self):
+        import httpx
+
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            captured["headers"] = dict(request.headers)
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": '{"verdict": "CONFIRMED"}'}}]},
+            )
+
+        verdict_fn = build_openai_compatible_verdict_fn(
+            base_url="http://192.168.50.55:8080/v1/chat/completions",
+            model="qwen",
+        )
+
+        # Swap in the mock transport the same way httpx recommends for tests:
+        # monkeypatch AsyncClient to route through a MockTransport instead of
+        # the network. We do this by patching httpx.AsyncClient's default
+        # transport via the `transport=` kwarg path exercised in _call.
+        orig_async_client = httpx.AsyncClient
+
+        def _mock_client(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return orig_async_client(*args, **kwargs)
+
+        with patch("httpx.AsyncClient", side_effect=_mock_client):
+            result = _run(verdict_fn("SYSTEM", "USER"))
+
+        self.assertEqual(result, '{"verdict": "CONFIRMED"}')
+        self.assertEqual(captured["url"], "http://192.168.50.55:8080/v1/chat/completions")
+        self.assertEqual(captured["body"]["model"], "qwen")
+        self.assertEqual(captured["body"]["stream"], False)
+        self.assertEqual(
+            captured["body"]["messages"],
+            [{"role": "system", "content": "SYSTEM"}, {"role": "user", "content": "USER"}],
+        )
+        self.assertNotIn("authorization", captured["headers"])
+
+    def test_sends_bearer_token_when_api_key_given(self):
+        import httpx
+
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["headers"] = dict(request.headers)
+            return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+        verdict_fn = build_openai_compatible_verdict_fn(
+            base_url="http://localhost:8080/v1/chat/completions",
+            model="qwen",
+            api_key="secret-token",
+        )
+
+        orig_async_client = httpx.AsyncClient
+
+        def _mock_client(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return orig_async_client(*args, **kwargs)
+
+        with patch("httpx.AsyncClient", side_effect=_mock_client):
+            _run(verdict_fn("SYSTEM", "USER"))
+
+        self.assertEqual(captured["headers"]["authorization"], "Bearer secret-token")
+
+    def test_raises_runtime_error_on_http_error_status(self):
+        import httpx
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500, text="internal error")
+
+        verdict_fn = build_openai_compatible_verdict_fn(
+            base_url="http://localhost:8080/v1/chat/completions",
+            model="qwen",
+        )
+
+        orig_async_client = httpx.AsyncClient
+
+        def _mock_client(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return orig_async_client(*args, **kwargs)
+
+        with patch("httpx.AsyncClient", side_effect=_mock_client):
+            with self.assertRaises(httpx.HTTPStatusError):
+                _run(verdict_fn("SYSTEM", "USER"))
 
 
 if __name__ == "__main__":

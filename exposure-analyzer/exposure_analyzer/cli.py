@@ -1,6 +1,6 @@
 """CLI entry point for `python -m exposure_analyzer`.
 
-Two engines are available:
+Three engines are available:
 
   --engine=fake    (default when no probe SDK is desired) uses cve-matcher's
                    own verdict as a stand-in and runs no probes. Cheap and
@@ -8,6 +8,12 @@ Two engines are available:
   --engine=claude  wires ExposureAgent through claude-agent-sdk. Runs the
                    registered probe for each CVE, sends output + candidate +
                    host state to Claude, and parses the returned verdict.
+  --engine=openai  same ExposureAgent orchestration as claude, but the
+                   verdict_fn calls any OpenAI-compatible chat-completions
+                   endpoint instead (local llama-server, vLLM, LM Studio...).
+                   Requires --base-url and --model. Used for the v3
+                   weaker-backend comparison (does scaffolding matter more
+                   when the model is worse?).
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from .agent import (
     AgentConfig,
     ExposureAgent,
     build_claude_verdict_fn,
+    build_openai_compatible_verdict_fn,
     docker_exec_probe_runner,
 )
 from .proposal import build_claude_proposer_fn
@@ -58,11 +65,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--remediations", type=Path, default=None,
                            help="Optional path to remediations.json from fix-publisher (v2-10). "
                                 "When set together with --report, adds a Remediation Drafts section.")
-    p_analyze.add_argument("--engine", choices=("fake", "claude"), default="fake",
+    p_analyze.add_argument("--engine", choices=("fake", "claude", "openai"), default="fake",
                            help="Verdict engine. fake=cve-matcher passthrough (default); "
-                                "claude=ExposureAgent via claude-agent-sdk.")
+                                "claude=ExposureAgent via claude-agent-sdk; "
+                                "openai=ExposureAgent via any OpenAI-compatible endpoint "
+                                "(--base-url/--model required).")
+    p_analyze.add_argument("--base-url", default=None,
+                           help="Chat-completions endpoint URL (openai engine only), "
+                                "e.g. http://192.168.50.55:8080/v1/chat/completions")
+    p_analyze.add_argument("--model", default=None,
+                           help="Model name to send in the request body (openai engine only).")
+    p_analyze.add_argument("--api-key", default=None,
+                           help="Bearer token for the openai engine, if the endpoint "
+                                "requires one. Omit for an unauthenticated local server.")
     p_analyze.add_argument("--no-probes", action="store_true",
-                           help="Skip probe execution (claude engine only). "
+                           help="Skip probe execution (claude/openai engines only). "
                                 "Useful when host-state is imported from another machine.")
     p_analyze.add_argument("--propose-probes", action="store_true", default=False,
                            help="Ask LLM to propose a non-destructive probe when no "
@@ -134,11 +151,24 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         verdicts = [_fake_verdict(f) for f in kev_findings]
         engine_label = "fake (cve-matcher passthrough, no AI)"
     else:
-        try:
-            verdict_fn = build_claude_verdict_fn()
-        except RuntimeError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
+        if args.engine == "openai":
+            if not args.base_url or not args.model:
+                print("error: --engine=openai requires --base-url and --model",
+                      file=sys.stderr)
+                return 1
+            try:
+                verdict_fn = build_openai_compatible_verdict_fn(
+                    base_url=args.base_url, model=args.model, api_key=args.api_key,
+                )
+            except RuntimeError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+        else:
+            try:
+                verdict_fn = build_claude_verdict_fn()
+            except RuntimeError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
         agent_cfg = AgentConfig(run_probes=not args.no_probes)
         probe_runner = None
         if args.target_container:
@@ -176,7 +206,10 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"error: analyzer failed: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
-        engine_label = "claude (via claude-agent-sdk)"
+        if args.engine == "openai":
+            engine_label = f"openai (model={args.model}, {args.base_url})"
+        else:
+            engine_label = "claude (via claude-agent-sdk)"
         if args.propose_probes:
             engine_label += " + probe-proposer"
             if args.auto_approve_all_unsafe:
