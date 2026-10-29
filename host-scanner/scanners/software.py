@@ -185,7 +185,16 @@ $apps | ConvertTo-Json -Depth 2
             "running_unmanaged": result.running_unmanaged,
             "notes": result.notes,
         }
-        return unmanaged.to_installed_apps(result)
+        apps = unmanaged.to_installed_apps(result)
+        if self.scanner_cfg.get("include_ecosystems", True):
+            try:
+                from . import ecosystems
+                eco = ecosystems.collect(ecosystems.linux_fs())
+                apps.extend(eco.apps)
+                self.unmanaged["ecosystems"] = {"counts": eco.counts, "notes": eco.notes}
+            except Exception as error:
+                self.unmanaged["ecosystems"] = {"error": f"{type(error).__name__}: {error}"}
+        return apps
 
     # ---------------------------------------------------------------
     # Legacy engine: NVD keyword search per app.
