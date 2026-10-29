@@ -24,6 +24,8 @@ a = Analysis(
         'scanners.unmanaged',
         'scanners.ecosystems',
         'scanners.services',
+        'scanners.posture',
+        'scanners.leaks',
         'scanners.users',
         'scanners.processes',
         'scanners.startup',

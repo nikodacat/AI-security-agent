@@ -37,6 +37,8 @@ _SCANNERS = [
     ("users",      "scanners.users",      "UsersScanner"),
     ("processes",  "scanners.processes",  "ProcessScanner"),
     ("services",   "scanners.services",   "ServicesScanner"),
+    ("posture",    "scanners.posture",    "PostureScanner"),
+    ("leaks",      "scanners.leaks",      "LeaksScanner"),
     ("startup",    "scanners.startup",    "StartupScanner"),
     ("hardware",   "scanners.hardware",   "HardwareScanner"),
 ]

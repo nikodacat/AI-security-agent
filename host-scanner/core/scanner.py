@@ -19,6 +19,8 @@ SCANNER_MODULES = [
     ("users",     "scanners.users",      "UsersScanner"),
     ("processes", "scanners.processes",  "ProcessScanner"),
     ("services",  "scanners.services",   "ServicesScanner"),
+    ("posture",   "scanners.posture",    "PostureScanner"),
+    ("leaks",     "scanners.leaks",      "LeaksScanner"),
     ("filesystem","scanners.filesystem", "FilesystemScanner"),
     ("startup",   "scanners.startup",    "StartupScanner"),
     ("hardware",  "scanners.hardware",   "HardwareScanner"),
