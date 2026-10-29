@@ -36,6 +36,7 @@ _SCANNERS = [
     ("software",   "scanners.software",   "SoftwareScanner"),
     ("users",      "scanners.users",      "UsersScanner"),
     ("processes",  "scanners.processes",  "ProcessScanner"),
+    ("services",   "scanners.services",   "ServicesScanner"),
     ("startup",    "scanners.startup",    "StartupScanner"),
     ("hardware",   "scanners.hardware",   "HardwareScanner"),
 ]
