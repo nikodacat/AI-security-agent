@@ -244,6 +244,44 @@ KNOWN_PROBES: dict[str, ProbeTemplate] = {
             "untrusted input, which is rare."
         ),
     ),
+
+    # PHP (2026-10 KEV additions). Both are fixed in 8.2.35 / 8.3.36 / 8.4.27 /
+    # 8.5.12, so any PHP older than those on its branch is affected. 7.x and
+    # 8.0/8.1 are end-of-life and will never get a fix.
+    "CVE-2026-109618": ProbeTemplate(
+        command="php -v",
+        expected_signals=[
+            r"PHP (7\.[3-9]|8\.[01]\.)",
+            r"PHP 8\.2\.([0-9]|[12][0-9]|3[0-4])(?![0-9])",
+            r"PHP 8\.3\.([0-9]|[12][0-9]|3[0-5])(?![0-9])",
+            r"PHP 8\.4\.([0-9]|1[0-9]|2[0-6])(?![0-9])",
+            r"PHP 8\.5\.([0-9]|1[01])(?![0-9])",
+        ],
+        interpretation_hint=(
+            "Affected: PHP 7.3.0 up to (not including) 8.2.35, 8.3.x < 8.3.36, "
+            "8.4.x < 8.4.27, 8.5.x < 8.5.12. A match means the PHP CLI on this "
+            "host is in range. The web server may load a different PHP build "
+            "(mod_php / php-fpm): check host_state.services for which one serves "
+            "requests. PHP 7.x/8.0/8.1 are end-of-life: no fixed version exists "
+            "on those branches, only an upgrade to a fixed 8.x release."
+        ),
+    ),
+    "CVE-2026-109619": ProbeTemplate(
+        command="php -v",
+        expected_signals=[
+            r"PHP (5\.[4-9]|7\.|8\.[01]\.)",
+            r"PHP 8\.2\.([0-9]|[12][0-9]|3[0-4])(?![0-9])",
+            r"PHP 8\.3\.([0-9]|[12][0-9]|3[0-5])(?![0-9])",
+            r"PHP 8\.4\.([0-9]|1[0-9]|2[0-6])(?![0-9])",
+            r"PHP 8\.5\.([0-9]|1[01])(?![0-9])",
+        ],
+        interpretation_hint=(
+            "Affected: PHP 5.4.0 up to (not including) 8.2.35, 8.3.x < 8.3.36, "
+            "8.4.x < 8.4.27, 8.5.x < 8.5.12. Same caveats as CVE-2026-109618: "
+            "the CLI version is evidence for the web-serving PHP only if "
+            "host_state.services shows the same build is what Apache/php-fpm uses."
+        ),
+    ),
 }
 
 

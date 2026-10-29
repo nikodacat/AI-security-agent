@@ -197,6 +197,7 @@ def _finding_to_kev_finding(finding) -> dict[str, Any]:
         "package_name": finding.package.name,
         "package_version": finding.package.version,
         "package_vendor": finding.package.vendor,
+        "package_source": getattr(finding.package, "source", ""),
         "match_reason": finding.match_reason,
         "match_score": finding.match_score,
         "verdict": finding.verdict,
@@ -207,7 +208,10 @@ def _finding_to_kev_finding(finding) -> dict[str, Any]:
 
 def _derive_host_state(scan: dict[str, Any]) -> dict[str, Any]:
     scanners = scan.get("scanners", {})
+    from exposure_analyzer.hoststate import summarize_services
+    services = summarize_services(scanners.get("services"))
     return {
+        **({"services": services} if services else {}),
         "target": "local host",
         "system": {
             "hostname": scan.get("system", {}).get("hostname"),

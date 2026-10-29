@@ -159,6 +159,27 @@ class TestEvalCmsPluginProbes(unittest.TestCase):
             self.assertIn("apache2 -v", KNOWN_PROBES[cve].command)
 
 
+class TestPhpProbes(unittest.TestCase):
+    def _hits(self, cve_id: str, output: str) -> bool:
+        return any(re.search(p, output) for p in KNOWN_PROBES[cve_id].expected_signals)
+
+    def test_vulnerable_versions_match(self):
+        for v in ("7.4.21", "7.3.0", "8.0.30", "8.1.2", "8.2.34", "8.2.0", "8.3.35", "8.4.26", "8.5.11"):
+            self.assertTrue(self._hits("CVE-2026-109618", f"PHP {v} (cli)"), v)
+            self.assertTrue(self._hits("CVE-2026-109619", f"PHP {v} (cli)"), v)
+
+    def test_fixed_versions_do_not_match(self):
+        for v in ("8.2.35", "8.2.40", "8.3.36", "8.4.27", "8.5.12", "8.5.20", "9.0.0"):
+            self.assertFalse(self._hits("CVE-2026-109618", f"PHP {v} (cli)"), v)
+            self.assertFalse(self._hits("CVE-2026-109619", f"PHP {v} (cli)"), v)
+
+    def test_range_start_differs_between_the_two(self):
+        self.assertFalse(self._hits("CVE-2026-109618", "PHP 7.2.10 (cli)"))
+        self.assertTrue(self._hits("CVE-2026-109619", "PHP 7.2.10 (cli)"))
+        self.assertTrue(self._hits("CVE-2026-109619", "PHP 5.4.0 (cli)"))
+        self.assertFalse(self._hits("CVE-2026-109619", "PHP 5.3.29 (cli)"))
+
+
 class TestProbeLibraryContract(unittest.TestCase):
     """Whole-library invariants that catch drift when new probes are added."""
 

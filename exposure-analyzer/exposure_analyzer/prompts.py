@@ -44,6 +44,21 @@ Version-based rule (applies to most candidates the operator will send you):
   use `NOT_RUNNING` for libraries just because host_state lacks a matching
   process (libraries do not appear in process lists).
 
+Service-config rule (applies when host_state has a `services` section):
+- host_state.services holds measured facts from inside the host: which process
+  owns each listening port and on which address, which Apache modules are
+  loaded, key php.ini flags. Prefer these over assumptions. If a CVE needs a
+  component that `services` shows is NOT loaded (e.g. an Apache mod_proxy SSRF
+  with `mod_proxy_loaded: false`, or a CGI-dependent bug with `mod_cgi_loaded:
+  false`), the attack path does not exist -> MITIGATED_BY_CONFIG, citing that
+  field. If `services` shows the component present and the version is
+  affected, that supports CONFIRMED (together with reachability).
+- A candidate with `package_source` such as `unmanaged-binary`, `wordpress-core`,
+  `wordpress-plugin`, `composer`, `jar`, `npm` or `pip` came from outside the OS
+  package manager. Its version is a measurement of the installed files, so apply
+  the Version-based rule to it exactly like a package version. These items have
+  no distro backports: an affected version is genuinely unpatched.
+
 External-attacker rule (applies when the "External-attacker view" section is present):
 - The `network_state` section, when shown, is what an external attacker on the
   same network measured — which ports responded, banner strings, best-guess
@@ -276,6 +291,10 @@ def _candidate_summary(candidate: dict[str, Any]) -> dict[str, Any]:
         "cwes",
         "package_name",
         "package_version",
+        "package_source",
+        "source",
+        "source_port",
+        "banner",
         "verdict",
         "verdict_detail",
         "ransomware_linked",
