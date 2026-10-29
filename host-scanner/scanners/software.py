@@ -61,6 +61,13 @@ class SoftwareScanner(BaseScanner):
     # ---------------------------------------------------------------
 
     def run(self) -> dict:
+        out = self._run_inner()
+        unmanaged = getattr(self, "unmanaged", None)
+        if unmanaged and unmanaged.get("enabled"):
+            out["unmanaged"] = unmanaged
+        return out
+
+    def _run_inner(self) -> dict:
         engine = (self.scanner_cfg.get("engine") or "kev").lower()
         apps = self._get_installed_apps()
         platform_name = "linux" if IS_LINUX else ("windows" if IS_WINDOWS else "unknown")
@@ -153,8 +160,32 @@ $apps | ConvertTo-Json -Depth 2
                 "Publisher": maintainer,
                 "InstallDate": "",
             })
+        apps.extend(self._unmanaged_apps())
         apps.sort(key=lambda a: a["DisplayName"].lower())
         return apps
+
+    def _unmanaged_apps(self) -> list[dict[str, Any]]:
+        """Programs outside the package manager (php built from source, /opt, ...).
+
+        Opt-out via ``scanners.software.include_unmanaged: false``. Failures
+        never break the dpkg inventory; they are recorded in ``self.unmanaged``.
+        """
+        self.unmanaged: dict[str, Any] = {"enabled": False}
+        if not self.scanner_cfg.get("include_unmanaged", True):
+            return []
+        try:
+            from . import unmanaged
+            result = unmanaged.collect(unmanaged.linux_probes())
+        except Exception as error:  # never let discovery break the scan
+            self.unmanaged = {"enabled": True, "error": f"{type(error).__name__}: {error}"}
+            return []
+        self.unmanaged = {
+            "enabled": True,
+            "binaries": result.binaries,
+            "running_unmanaged": result.running_unmanaged,
+            "notes": result.notes,
+        }
+        return unmanaged.to_installed_apps(result)
 
     # ---------------------------------------------------------------
     # Legacy engine: NVD keyword search per app.
@@ -248,8 +279,8 @@ $apps | ConvertTo-Json -Depth 2
                 name=name,
                 version=(app.get("DisplayVersion") or "").strip(),
                 vendor=(app.get("Publisher") or "").strip(),
-                product=_strip_version_suffix(name),
-                source="hsai-inventory",
+                product=(app.get("Product") or "").strip() or _strip_version_suffix(name),
+                source=app.get("Source") or "hsai-inventory",
             ))
 
         inventory = Inventory(

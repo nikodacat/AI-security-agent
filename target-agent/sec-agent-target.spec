@@ -21,6 +21,7 @@ a = Analysis(
         'scanners.base',
         'scanners.system',
         'scanners.software',
+        'scanners.unmanaged',
         'scanners.users',
         'scanners.processes',
         'scanners.startup',
