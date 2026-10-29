@@ -93,6 +93,15 @@ def build_parser() -> argparse.ArgumentParser:
                                 "produced by network-prober. Schema-validated on load. "
                                 "Omit to run in v1 mode (no external leg) — this is what "
                                 "the v2 delta baseline uses.")
+    p_analyze.add_argument("--banner-candidates", action="store_true", default=False,
+                           help="v3-1: also treat reachable network_state service_guess entries "
+                                "(product+version) as CVE candidate sources, so services built "
+                                "from source (invisible to the package inventory) get analysed. "
+                                "Requires --network-state. Needs cve-matcher next to this package.")
+    p_analyze.add_argument("--banner-no-nvd", action="store_true", default=False,
+                           help="With --banner-candidates: skip the NVD version-range lookup "
+                                "(offline). Candidates then carry verdict=unknown and the "
+                                "analyzer reasons from the banner version alone.")
     p_analyze.add_argument("--network-state-schema", type=Path,
                            default=Path("docs/schemas/network_state.schema.json"),
                            help="Schema used to validate --network-state input. Override "
@@ -146,6 +155,25 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         if isinstance(rc, int):
             return rc
         network_state = rc
+
+    if args.banner_candidates:
+        if network_state is None:
+            print("error: --banner-candidates requires --network-state", file=sys.stderr)
+            return 1
+        from .candidates import banner_candidates
+        try:
+            extra = banner_candidates(
+                network_state,
+                existing_cve_ids=[f.get("cve_id") for f in kev_findings],
+                enrich=not args.banner_no_nvd,
+                log=lambda m: print(m, file=sys.stderr),
+            )
+        except Exception as e:
+            print(f"error: banner candidates failed: {type(e).__name__}: {e}", file=sys.stderr)
+            return 1
+        print(f"banner candidates: +{len(extra)} (total {len(kev_findings) + len(extra)})",
+              file=sys.stderr)
+        kev_findings = kev_findings + extra
 
     if args.engine == "fake":
         verdicts = [_fake_verdict(f) for f in kev_findings]
