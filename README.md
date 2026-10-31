@@ -44,7 +44,7 @@ Verdicts: `CONFIRMED` / `MITIGATED_BY_CONFIG` / `MITIGATED_BY_EXPOSURE` /
 | Folder | What it does |
 |---|---|
 | `host-scanner/` | Reads the host: packages, configs, services, users, ports, application inventory (WordPress, composer, jar, npm, pip), unmanaged binaries. Also posture and leak scanners (sshd, sudoers, SUID, exposed `.env`/`.git`); these are **not yet fed to the analyzer or report**. |
-| `target-agent/` | `sec-agent-target`: the scanner as one static Linux binary (glibc >= 2.28, no Python needed on the target). Drop it into a container or server and run it. |
+| `target-agent/` | `sec-agent-target`: the scanner as one Linux binary (no Python needed on the target). The default build needs glibc >= 2.28; `build-glibc217.sh` builds a variant for glibc >= 2.17, which is what jessie/stretch-era images such as the Vulhub ones need. Drop it into a container or server and run it. |
 | `cve-matcher/` | Matches an inventory against CISA KEV; version-checks against NVD. `nvd_discovery.py` (experimental) asks NVD directly for CVEs affecting each detected product and version. |
 | `network-prober/` | nmap-based view from outside: open ports, banners, best-guess service and version. Output is `network_state.json`. |
 | `exposure-analyzer/` | The AI layer: per-CVE verdicts, read-only probes, optional LLM-proposed probes behind a human-approval gate. Runs on Claude (Agent SDK) or any OpenAI-compatible endpoint, so it can run on a **local model**. |
@@ -91,6 +91,54 @@ python run_full_scan.py --container eval-web-vuln --engine claude --v2 \
 `--nvd-discovery` adds CVEs from NVD that are not in CISA KEV. Each candidate
 costs one model call, so it is bounded by `--nvd-min-cvss` (default 7.0) and
 `--nvd-max-candidates` (default 40, highest score first).
+
+## What you get
+
+A run writes these files (`eval-lab/reports/<container>/` for the container
+quickstart, `scan-results/<host>-<timestamp>/` for the host one):
+
+| File | Contents |
+|---|---|
+| `scan.json` | What the scanner read from the target |
+| `candidates.json` | CVEs to judge, each with its source (`inventory`, `banner`, `nvd-cpe`) |
+| `network_state.json` | What the prober saw from outside (`--v2`) |
+| `verdicts.json` | One verdict per candidate, with reason and evidence |
+| `attack_narratives.md` | Prose attack path for each `CONFIRMED` (`--v2`) |
+| `remediations.md` | Draft fixes for each `CONFIRMED` (`--v2`) |
+| `report.html` | Everything above in one page |
+
+A verdict from the Apache 2.4.49 container (`CVE-2021-42013`), reason shortened:
+
+```json
+{
+  "cve_id": "CVE-2021-42013",
+  "verdict": "CONFIRMED",
+  "reason": "httpd -v confirms 2.4.49, mod_cgid is loaded enabling the RCE path, and the network-prober independently confirms port 80 is externally reachable. No mitigating config is present."
+}
+```
+
+The other four verdicts say why a CVE does *not* apply (for example
+`MITIGATED_BY_CONFIG`: the vulnerable module is not loaded). `NO_EVIDENCE` means
+the data could not settle it; read that as "review by hand", not as "safe".
+
+### Scan a container of your own
+
+The container quickstart above is wired to the three eval containers. For any
+other Debian/Ubuntu container, build the scanner once (`target-agent/build.sh`, or
+`build-glibc217.sh` for old images; the binary lands in `target-agent/dist/`),
+run it inside the container, and feed the JSON to
+the same stages that `compare_arms.py` uses:
+
+```bash
+docker cp target-agent/dist/sec-agent-target <container>:/tmp/
+docker exec <container> /tmp/sec-agent-target > host.json
+python eval-lab/compare_arms.py --container <container> --arm now     --host-json host.json --network-state network_state.json --engine claude --out out/
+```
+
+`--max-calls` and `--max-cost-usd` on `compare_arms.py` cap model use (default
+60 calls, $2). `network_state.json` comes from `network-prober`; see
+`eval-lab/run_vulhub_offline.py` for a complete worked example of this sequence
+on arbitrary images.
 
 ## Run on a local model
 
