@@ -234,6 +234,8 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"error: analyzer failed: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
+        for cve_id, msg in agent.last_batch_errors:
+            print(f"warning: no verdict for {cve_id}: {msg}", file=sys.stderr)
         if args.engine == "openai":
             engine_label = f"openai (model={args.model}, {args.base_url})"
         else:

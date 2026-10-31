@@ -28,7 +28,7 @@ from .hitl import (
 )
 from .probes import ProbeTemplate, lookup_probe
 from .prompts import SYSTEM_PROMPT, build_verdict_prompt
-from .proposal import ProbeProposer, ProposalValidationError, parse_proposal
+from .proposal import _TEXT_ONLY, ProbeProposer, ProposalValidationError, parse_proposal
 from .verdicts import Verdict, VerdictType
 
 
@@ -68,6 +68,36 @@ class AgentConfig:
     max_output_chars: int = 4000
 
 
+class BudgetExceeded(RuntimeError):
+    """A CallBudget limit was reached; no further model call is made."""
+
+
+@dataclass
+class CallBudget:
+    """Hard limits on model calls for one run. ``None`` means no limit on that axis.
+
+    `check()` runs before every call, so the call that would exceed a limit is never
+    sent. A run can still overshoot `max_cost_usd` by the cost of one call, because
+    cost is only known after the reply. Cost is whatever the SDK reports; engines that
+    report none (local models) are limited by `max_calls` only.
+    """
+
+    max_calls: int | None = None
+    max_cost_usd: float | None = None
+    calls: int = 0
+    cost_usd: float = 0.0
+
+    def check(self) -> None:
+        if self.max_calls is not None and self.calls >= self.max_calls:
+            raise BudgetExceeded(f"call limit {self.max_calls} reached")
+        if self.max_cost_usd is not None and self.cost_usd >= self.max_cost_usd:
+            raise BudgetExceeded(f"cost limit ${self.max_cost_usd:.2f} reached (spent ${self.cost_usd:.2f})")
+
+    def record(self, cost_usd: float | None) -> None:
+        self.calls += 1
+        self.cost_usd += cost_usd or 0.0
+
+
 class ExposureAgent:
     """The analyzer's Claude wrapper.
 
@@ -94,6 +124,8 @@ class ExposureAgent:
         self.approval_gate = approval_gate
         self.learned_probes_path = learned_probes_path
         self.target_container = target_container
+        self.last_batch_errors: list[tuple[str, str]] = []
+        self.stopped_by_budget: str = ""
 
     async def analyze(
         self,
@@ -178,12 +210,36 @@ class ExposureAgent:
         ``network_state`` is passed through unchanged to every candidate's
         :meth:`analyze` call — the filtering to "observations relevant to
         this CVE" happens inside :func:`prompts.build_verdict_prompt`.
+
+        One candidate failing does not abort the batch. An unparseable model
+        reply (``ValueError``) is retried once, since small local models
+        occasionally emit a malformed JSON object; a candidate that still
+        fails is left out of the result and recorded in
+        ``self.last_batch_errors`` as ``(cve_id, message)``. It is never
+        replaced by a made-up verdict: a silent ``NO_EVIDENCE`` would read as
+        an analysis result when none exists.
+
+        A :class:`BudgetExceeded` from ``verdict_fn`` ends the batch: the verdicts
+        so far are returned, ``self.stopped_by_budget`` says why, and the
+        remaining candidates get no verdict.
         """
         results: list[Verdict] = []
+        self.last_batch_errors = []
+        self.stopped_by_budget = ""
         for cand in candidates:
-            results.append(
-                await self.analyze(cand, host_state, network_state=network_state)
-            )
+            cve_id = cand.get("cve_id", "CVE-UNKNOWN")
+            try:
+                try:
+                    verdict = await self.analyze(cand, host_state, network_state=network_state)
+                except ValueError:
+                    verdict = await self.analyze(cand, host_state, network_state=network_state)
+            except BudgetExceeded as e:
+                self.stopped_by_budget = str(e)
+                break
+            except Exception as e:
+                self.last_batch_errors.append((cve_id, f"{type(e).__name__}: {e}"))
+                continue
+            results.append(verdict)
         return results
 
 
@@ -310,8 +366,11 @@ def docker_exec_probe_runner(container: str, config: AgentConfig | None = None) 
     return run
 
 
-def build_claude_verdict_fn() -> VerdictFn:
+def build_claude_verdict_fn(budget: CallBudget | None = None) -> VerdictFn:
     """Return a VerdictFn backed by claude-agent-sdk.
+
+    With a `budget`, every call is checked against it first and its cost
+    (``total_cost_usd`` from the SDK's result message) is recorded after.
 
     Deferred import: importing at module load would break tests on machines
     without the SDK installed. Call this only from CLI paths that intend to
@@ -327,13 +386,22 @@ def build_claude_verdict_fn() -> VerdictFn:
         ) from e
 
     async def _call(system_prompt: str, user_prompt: str) -> str:
-        options = ClaudeAgentOptions(system_prompt=system_prompt)
+        if budget is not None:
+            budget.check()
+        options = ClaudeAgentOptions(system_prompt=system_prompt, **_TEXT_ONLY)
         chunks: list[str] = []
-        async for msg in query(prompt=user_prompt, options=options):
-            # Different SDK message types expose text on .content or .text.
-            text = _extract_text(msg)
-            if text:
-                chunks.append(text)
+        cost: float | None = None
+        try:
+            async for msg in query(prompt=user_prompt, options=options):
+                # Different SDK message types expose text on .content or .text.
+                text = _extract_text(msg)
+                if text:
+                    chunks.append(text)
+                if type(msg).__name__ == "ResultMessage":
+                    cost = getattr(msg, "total_cost_usd", None)
+        finally:
+            if budget is not None:  # a failed call may still have been billed
+                budget.record(cost)
         return "".join(chunks)
 
     return _call
@@ -344,6 +412,7 @@ def build_openai_compatible_verdict_fn(
     model: str,
     api_key: str | None = None,
     timeout: float = 60.0,
+    max_tokens: int = 2048,
 ) -> VerdictFn:
     """Return a VerdictFn backed by any OpenAI-compatible chat-completions
     endpoint (llama-server, vLLM, LM Studio, Ollama's OpenAI shim, etc.).
@@ -375,6 +444,10 @@ def build_openai_compatible_verdict_fn(
                 {"role": "user", "content": user_prompt},
             ],
             "stream": False,
+            # A verdict is a short JSON object. Without a cap a small local
+            # model can loop on one prompt, hold a single-slot server for many
+            # minutes, and keep generating after the client has timed out.
+            "max_tokens": max_tokens,
         }
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(base_url, json=payload, headers=headers)

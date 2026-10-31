@@ -54,23 +54,31 @@ def banner_services(network_state: Iterable[dict[str, Any]]) -> list[dict[str, A
     return out
 
 
+def banner_packages(services: list[dict[str, Any]]) -> list[Any]:
+    """Reachable service observations -> cve-matcher Package objects."""
+    _ensure_cve_matcher_importable()
+    from cve_matcher.inventory import Package  # type: ignore
+
+    return [
+        Package(
+            name=obs["service_guess"]["product"],
+            version=str(obs["service_guess"]["version"]),
+            vendor=obs["service_guess"].get("vendor", "") or "",
+            product=obs["service_guess"]["product"],
+            source=f"banner:{obs.get('port')}/{obs.get('protocol', 'tcp')}",
+        )
+        for obs in services
+    ]
+
+
 def _default_match(services: list[dict[str, Any]], catalog: Any = None) -> list[Any]:
     _ensure_cve_matcher_importable()
     from cve_matcher import kev as kev_mod  # type: ignore
     from cve_matcher import matcher as matcher_mod  # type: ignore
-    from cve_matcher.inventory import Inventory, Package  # type: ignore
+    from cve_matcher.inventory import Inventory  # type: ignore
 
-    packages = []
-    for obs in services:
-        g = obs["service_guess"]
-        packages.append(Package(
-            name=g["product"],
-            version=str(g["version"]),
-            vendor=g.get("vendor", "") or "",
-            product=g["product"],
-            source=f"banner:{obs.get('port')}/{obs.get('protocol', 'tcp')}",
-        ))
-    inventory = Inventory(scanned_at="", host_os="banner", host_version="", packages=packages)
+    inventory = Inventory(scanned_at="", host_os="banner", host_version="",
+                          packages=banner_packages(services))
     cat = catalog if catalog is not None else kev_mod.load()
     return matcher_mod.match(inventory, cat).findings
 
@@ -164,3 +172,79 @@ def banner_candidates(
         seen.add(cve_id)
         out.append(finding_to_candidate(f, banner_by_source.get(f.package.source, "")))
     return out
+
+
+# --- NVD discovery (v3-2) ----------------------------------------------------
+
+def _nvd_discovery_module():
+    _ensure_cve_matcher_importable()
+    from cve_matcher import nvd_discovery  # type: ignore
+    return nvd_discovery
+
+
+def nvd_candidate(found: dict[str, Any]) -> dict[str, Any]:
+    """cve_matcher.nvd_discovery result -> kev_findings-shaped candidate.
+
+    Not in CISA KEV means there is no known-exploited signal, and the dict
+    says so, so the analyzer does not read "candidate" as "being exploited".
+    A Debian-revisioned package gets verdict `unknown` rather than
+    `vulnerable`: Debian backports fixes without bumping the upstream version.
+    """
+    pkg = found["package"]
+    parts = found["cpe"].split(":")
+    vendor, product = (parts[3], parts[4]) if len(parts) > 5 else ("", "")
+    score, sev = found["score"], found.get("severity", "")
+    base = (f"NVD lists {found['cpe']} as affected (CVSS {score:g}{' ' + sev if sev else ''}). "
+            "Not in CISA KEV: no known-exploited signal.")
+    if found.get("distro_patched"):
+        verdict = "unknown"
+        detail = (base + f" Installed '{pkg.version}' carries a Debian revision, and Debian backports "
+                  "security fixes without changing the upstream version, so being in NVD's range "
+                  "does not show it is unpatched; judge from the distro fix version if you know it.")
+    else:
+        verdict = "vulnerable"
+        detail = base
+    desc = found.get("description", "")
+    return {
+        "cve_id": found["cve_id"],
+        "kev_name": f"NVD {found['cve_id']} (not in CISA KEV)",
+        "kev_vendor": vendor,
+        "kev_product": product,
+        "kev_description": desc,
+        "cwes": [],
+        "package_name": pkg.name,
+        "package_version": pkg.version,
+        "package_vendor": pkg.vendor,
+        "package_source": pkg.source,
+        "match_reason": "nvd-cpe",
+        "match_score": 100.0,
+        "verdict": verdict,
+        "verdict_detail": detail,
+        "ransomware_linked": False,
+        "source": "nvd-cpe",
+        "cvss": score,
+    }
+
+
+def nvd_candidates(
+    packages: Iterable[Any],
+    *,
+    existing_cve_ids: Iterable[str] = (),
+    min_cvss: float | None = None,
+    max_total: int | None = None,
+    api_key: str | None = None,
+    discover_fn: Callable[..., list[dict[str, Any]]] | None = None,
+    log: Callable[[str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Candidates NVD lists for the given packages that are not already known.
+
+    `packages` are cve_matcher.inventory.Package objects (inventory entries
+    and banner-derived services alike). CVEs already present from the KEV or
+    banner paths are skipped so each is analysed once.
+    """
+    mod = _nvd_discovery_module()
+    kwargs: dict[str, Any] = {"exclude_cve_ids": frozenset(existing_cve_ids), "api_key": api_key, "log": log}
+    kwargs["min_cvss"] = mod.DEFAULT_MIN_CVSS if min_cvss is None else min_cvss
+    kwargs["max_total"] = mod.DEFAULT_MAX_TOTAL if max_total is None else max_total
+    found = (discover_fn or mod.discover)(list(packages), **kwargs)
+    return [nvd_candidate(f) for f in found]

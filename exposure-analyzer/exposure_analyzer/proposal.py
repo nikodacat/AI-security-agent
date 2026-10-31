@@ -13,6 +13,12 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
+# One-shot text completion: no tools, no settings files, one turn. Without this the
+# Agent SDK sends Claude Code's tool definitions with every call (measured: 33,542 input
+# tokens for a ~2,000-token prompt; 3,321 with these options, same reply).
+_TEXT_ONLY = {"tools": [], "setting_sources": [], "max_turns": 1}
+
+
 # ---- Prompt ----------------------------------------------------------------
 
 SYSTEM_PROMPT_PROPOSE = """\
@@ -246,7 +252,7 @@ def build_claude_proposer_fn() -> ProbeProposer:
 
     async def _call(candidate: dict[str, Any], host_state: dict[str, Any]) -> str:
         from .agent import _extract_text  # reuse the extractor
-        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT_PROPOSE)
+        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT_PROPOSE, **_TEXT_ONLY)
         user_prompt = build_proposer_user_prompt(candidate, host_state)
         chunks: list[str] = []
         async for msg in query(prompt=user_prompt, options=options):

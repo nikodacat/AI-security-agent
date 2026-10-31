@@ -16,6 +16,12 @@ from typing import Protocol
 
 from .remediations import Remediation
 
+# One-shot text completion: no tools, no settings files, one turn. Without this the
+# Agent SDK sends Claude Code's tool definitions with every call (measured: 33,542 input
+# tokens for a ~2,000-token prompt; 3,321 with these options, same reply).
+_TEXT_ONLY = {"tools": [], "setting_sources": [], "max_turns": 1}
+
+
 
 class PublisherFn(Protocol):
     """Callable protocol for the swappable publisher backend.
@@ -168,7 +174,7 @@ def build_claude_publisher_fn(model: str = "sonnet") -> PublisherFn:
     from .prompts import SYSTEM_PROMPT, build_remediation_prompt, parse_remediation
 
     async def _call(user_prompt: str) -> str:
-        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT, model=model)
+        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT, model=model, **_TEXT_ONLY)
         chunks: list[str] = []
         async for msg in query(prompt=user_prompt, options=options):
             text = _extract_text(msg)
