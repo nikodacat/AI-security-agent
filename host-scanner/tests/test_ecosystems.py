@@ -103,6 +103,13 @@ class TestCollect(unittest.TestCase):
         r = eco.collect(fs)
         self.assertEqual([(a["DisplayName"], a["Product"]) for a in r.apps], [("log4j-core", "Log4j2")])
 
+    def test_jar_in_root_maven_repository_is_found(self):
+        # Vulhub's Struts2 image runs from here; the path is too deep to reach from /root.
+        path = "/root/.m2/repository/org/apache/struts/struts2-core/2.3.30/struts2-core-2.3.30.jar"
+        r = eco.collect(_fake_fs({path: ""}))
+        self.assertEqual([(a["DisplayName"], a["DisplayVersion"], a["Product"]) for a in r.apps],
+                         [("struts2-core", "2.3.30", "Struts")])
+
     def test_duplicate_jar_reported_once(self):
         fs = _fake_fs({"/opt/a/lib/log4j-core-2.14.1.jar": "", "/opt/b/lib/log4j-core-2.14.1.jar": ""})
         self.assertEqual(len(eco.collect(fs).apps), 1)

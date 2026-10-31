@@ -9,10 +9,16 @@ import os
 
 HOST_SCANNER = os.path.abspath(os.path.join(os.getcwd(), '..', 'host-scanner'))
 
+# Shared libraries to force into the bundle, colon-separated paths. PyInstaller
+# treats libcrypt as a system library and leaves it out, but a Python built on
+# CentOS 7 links libcrypt.so.2 while Debian 8/9 only ship libcrypt.so.1
+# (build-glibc217.sh sets this; build.sh leaves it empty).
+EXTRA_LIBS = [(p, '.') for p in os.environ.get('SAT_EXTRA_LIBS', '').split(':') if p]
+
 a = Analysis(
     ['target_agent_main.py'],
     pathex=[HOST_SCANNER],
-    binaries=[],
+    binaries=EXTRA_LIBS,
     datas=[],
     # importlib.import_module() is dynamic -- PyInstaller cannot follow it
     # from static analysis, so every scanner module gets listed explicitly.

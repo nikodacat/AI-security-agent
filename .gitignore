@@ -209,3 +209,6 @@ config.local.yaml
 config.local.yml
 *.local
 local_settings.py
+
+# PyInstaller work dir for target-agent/build-glibc217.sh (dist/ is already ignored)
+target-agent/build-glibc217/

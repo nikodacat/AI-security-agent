@@ -28,7 +28,10 @@ MAX_WALK_DEPTH = 6
 HEADER_BYTES = 8192
 
 WEB_ROOTS = ("/var/www", "/usr/share/nginx", "/srv", "/opt", "/app", "/usr/src")
-APP_ROOTS = ("/opt", "/srv", "/app", "/usr/local", "/var/lib", "/usr/share", "/home")
+APP_ROOTS = ("/opt", "/srv", "/app", "/usr/local", "/var/lib", "/usr/share", "/home",
+             # Apps run straight from Maven's cache in many images (Vulhub's Struts2 does),
+             # and the layout org/apache/<group>/<artifact>/<ver>/ is too deep to reach from /root.
+             "/root/.m2/repository")
 PY_SITE_GLOBS = ("/usr/local/lib",)  # pip installs outside dpkg's dist-packages
 
 # jar artifact name -> KEV product spelling
