@@ -126,13 +126,14 @@ the data could not settle it; read that as "review by hand", not as "safe".
 The container quickstart above is wired to the three eval containers. For any
 other Debian/Ubuntu container, build the scanner once (`target-agent/build.sh`, or
 `build-glibc217.sh` for old images; the binary lands in `target-agent/dist/`),
-run it inside the container, and feed the JSON to
-the same stages that `compare_arms.py` uses:
+run it inside the container, and feed the JSON to the same stages that
+`compare_arms.py` uses:
 
 ```bash
 docker cp target-agent/dist/sec-agent-target <container>:/tmp/
 docker exec <container> /tmp/sec-agent-target > host.json
-python eval-lab/compare_arms.py --container <container> --arm now     --host-json host.json --network-state network_state.json --engine claude --out out/
+python eval-lab/compare_arms.py --container <container> --arm now \
+    --host-json host.json --network-state network_state.json --engine claude --out out/
 ```
 
 `--max-calls` and `--max-cost-usd` on `compare_arms.py` cap model use (default
