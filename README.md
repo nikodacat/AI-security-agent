@@ -203,7 +203,7 @@ engine; week-9 and "banners" rows are the mean of 2 runs, the NVD row is 1 run.
 
 Each [Vulhub](https://github.com/vulhub/vulhub) directory exists to demonstrate one
 named CVE on a pinned image, so that CVE is an answer key the project did not
-author. Five scenarios with a CVE (`eval-lab/vulhub_scenarios.yaml`), Claude
+author. Fifteen scenarios with a CVE (`eval-lab/vulhub_scenarios.yaml`), Claude
 engine, **1 run each**, scored only on whether that CVE came out `CONFIRMED`:
 
 | Scenario | Expected | KEV + banners | + NVD discovery |
@@ -213,10 +213,31 @@ engine, **1 run each**, scored only on whether that CVE came out `CONFIRMED`:
 | Solr 8.11.0 (Log4Shell) | CVE-2021-44228 | CONFIRMED | not run |
 | nginx 1.13.2 | CVE-2017-7529 | not a candidate | CONFIRMED |
 | bash 4.3 (Shellshock) | CVE-2014-6271 | not a candidate | **MITIGATED_BY_CONFIG (wrong)** |
+| httpd 2.4.49 | CVE-2021-41773 | CONFIRMED | not run |
+| Spring4Shell (spring 5.3.17) | CVE-2022-22965 | CONFIRMED | not run |
+| Tomcat 9.0.30 (Ghostcat) | CVE-2020-1938 | not a candidate | not a candidate |
+| Jenkins 2.138 | CVE-2018-1000861 | not a candidate | not a candidate |
+| Shiro 1.2.4 | CVE-2016-4437 | not a candidate | not a candidate |
+| Drupal 8.5.0 | CVE-2018-7600 | not a candidate | not a candidate |
+| phpMyAdmin 4.8.1 | CVE-2018-12613 | not a candidate | not a candidate |
+| ActiveMQ 5.17.3 | CVE-2023-46604 | not a candidate | not a candidate |
+| Samba 4.6.3 (SambaCry) | CVE-2017-7494 | not a candidate | not a candidate |
+| Elasticsearch 1.4.2 | CVE-2015-1427 | not a candidate | not a candidate |
 
-3 of 5 with KEV and banners, 4 of 5 with NVD discovery on nginx and bash; the
-NVD arm was not run on the other three. Only nginx is found *because of* NVD
-discovery. Notes:
+**5 of 15 with KEV and banners; 6 of 15 once NVD discovery is added.** The
+NVD model stage was run only on nginx and bash. For the other eight new
+scenarios the NVD candidate list was built and the expected CVE is not in it, so
+the miss is known without a model call. Only nginx is found *because of* NVD
+discovery; bash is found as a candidate but judged wrong.
+
+**Eight of the fifteen are misses of candidate sourcing, not of judgment.** For
+Tomcat, Jenkins, Shiro, Drupal, phpMyAdmin, ActiveMQ, Samba and Elasticsearch
+the expected CVE never became a candidate. NVD discovery only queries a
+curated list of 21 products (`cve-matcher/cve_matcher/nvd_discovery.py`,
+`CPE_MAP`) and none of these is on it; the scanner does not list several of
+them as applications; the prober read the Tomcat and Elasticsearch versions
+from banners but nothing turns that into a query. So the tool's coverage is the
+CVEs for products it knows, and it says nothing about the rest. Notes:
 
 - **The bash miss is real.** That image replaces `/bin/bash` with a vulnerable
   4.3.0 build but leaves dpkg saying `4.3-11+deb8u1`, the patched Debian

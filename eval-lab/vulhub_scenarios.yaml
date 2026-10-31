@@ -16,3 +16,15 @@ scenarios:
   - {name: php-cgi-5-4-1,     dir: php/CVE-2012-1823,       expected: CVE-2012-1823,  many_cves: true}
   - {name: nginx-1-13-2,      dir: nginx/CVE-2017-7529,     expected: CVE-2017-7529,  many_cves: true}
   - {name: redis-4-0-14,      dir: redis/4-unacc,           expected: null,           many_cves: true}
+
+  # Batch 2 (2026-11-01): ten more, so there are 15 scored scenarios.
+  - {name: httpd-2-4-49,      dir: httpd/CVE-2021-41773,    expected: CVE-2021-41773, famous: true}
+  - {name: tomcat-ghostcat,   dir: tomcat/CVE-2020-1938,    expected: CVE-2020-1938,  famous: true}
+  - {name: jenkins-2-138,     dir: jenkins/CVE-2018-1000861, expected: CVE-2018-1000861}
+  - {name: spring4shell,      dir: spring/CVE-2022-22965,   expected: CVE-2022-22965, famous: true}
+  - {name: shiro-1-2-4,       dir: shiro/CVE-2016-4437,     expected: CVE-2016-4437}
+  - {name: drupalgeddon2,     dir: drupal/CVE-2018-7600,    expected: CVE-2018-7600,  famous: true}
+  - {name: phpmyadmin-4-8-1,  dir: phpmyadmin/CVE-2018-12613, expected: CVE-2018-12613}
+  - {name: activemq-5-17-3,   dir: activemq/CVE-2023-46604, expected: CVE-2023-46604, famous: true}
+  - {name: sambacry,          dir: samba/CVE-2017-7494,     expected: CVE-2017-7494,  famous: true}
+  - {name: elasticsearch-1-4-2, dir: elasticsearch/CVE-2015-1427, expected: CVE-2015-1427}

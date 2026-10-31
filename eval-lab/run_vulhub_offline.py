@@ -36,6 +36,21 @@ def sh(cmd: list[str], cwd: Path | None = None, timeout: int = 300) -> subproces
                           errors="replace", env=ENV, timeout=timeout, check=False)
 
 
+def compose_args(vdir: Path, proj: str, out: Path) -> list[str]:
+    """`docker compose -p <proj> -f <base> -f <override>` where the override drops every
+    host port mapping. The harness reaches the container over the eval-lab network, never
+    through a host port, and on Windows ports such as 445 and 61616 sit in reserved ranges
+    and make `up` fail ("ports are not available")."""
+    base = next((vdir / n for n in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml")
+                 if (vdir / n).exists()), None)
+    svcs = sh(["docker", "compose", "-p", proj, "config", "--services"], cwd=vdir).stdout.split()
+    if base is None or not svcs:
+        return ["docker", "compose", "-p", proj]
+    over = out / "no-host-ports.yml"
+    over.write_text("services:\n" + "".join(f"  {sv}:\n    ports: !reset []\n" for sv in svcs), encoding="utf-8")
+    return ["docker", "compose", "-p", proj, "-f", str(base), "-f", str(over)]
+
+
 def wait_ready(cid: str, alias: str, timeout: int = 120) -> str:
     """Poll from eval-attacker until the container accepts a TCP connection on any port
     it exposes. A fixed sleep scanned Solr before it was up (it needs ~20 s) and made the
@@ -69,10 +84,11 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
         return ok
 
     try:
-        up = sh(["docker", "compose", "-p", proj, "up", "-d"], cwd=vdir, timeout=420)
+        dc = compose_args(vdir, proj, out)
+        up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
         if not step("up", up.returncode == 0, up.stderr.strip()[-300:]):
             return rec
-        cid = sh(["docker", "compose", "-p", proj, "ps", "-q"], cwd=vdir).stdout.split()[0]
+        cid = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()[0]
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         rec["container"] = cname
         alias = proj
@@ -113,7 +129,7 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
             step(f"candidates.{arm}", ok, detail)
             (out / f"candidates.{arm}.log").write_text(cp.stderr, encoding="utf-8")
     finally:
-        sh(["docker", "compose", "-p", proj, "down", "-v", "--remove-orphans"], cwd=vdir, timeout=240)
+        sh(compose_args(vdir, proj, out) + ["down", "-v", "--remove-orphans"], cwd=vdir, timeout=240)
         (out / "scenario.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return rec
 
@@ -128,12 +144,13 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
         print(f"  [{name}] no offline output; run the offline stage first", flush=True)
         return None
     res_dir = out / f"claude.{arm}.r{run}"
+    dc = compose_args(vdir, proj, out)
     try:
-        up = sh(["docker", "compose", "-p", proj, "up", "-d"], cwd=vdir, timeout=420)
+        up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
         if up.returncode != 0:
             print(f"  [{name}] up FAILED {up.stderr.strip()[-200:]}", flush=True)
             return None
-        cid = sh(["docker", "compose", "-p", proj, "ps", "-q"], cwd=vdir).stdout.split()[0]
+        cid = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()[0]
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         sh(["docker", "network", "connect", "--alias", proj, NETWORK, cid])
         print(f"  [{name}] ready: {wait_ready(cid, proj)}", flush=True)
@@ -147,7 +164,7 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
         rj = res_dir / "result.json"
         return json.loads(rj.read_text(encoding="utf-8")) if rj.exists() else None
     finally:
-        sh(["docker", "compose", "-p", proj, "down", "-v", "--remove-orphans"], cwd=vdir, timeout=240)
+        sh(dc + ["down", "-v", "--remove-orphans"], cwd=vdir, timeout=240)
 
 
 def main() -> int:
