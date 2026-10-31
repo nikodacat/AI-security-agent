@@ -1,0 +1,18 @@
+# Vulhub scenarios for the external-answer-key evaluation (v3-6b).
+#
+# The answer key here is NOT written by this project: each Vulhub directory
+# exists to demonstrate one named CVE on one pinned image. `expected` is that
+# CVE and is the only thing scored as recall. Other CVEs the tool raises on the
+# same image have no answer key and stay "unreviewed".
+#
+# `dir` is relative to the Vulhub clone (default C:/Users/ideal/vulhub, override
+# with --vulhub). `expected` null means the scenario is an exposure pattern with
+# no CVE id (recorded, not scored).
+
+scenarios:
+  - {name: bash-shellshock,   dir: bash/CVE-2014-6271,      expected: CVE-2014-6271,  famous: true}
+  - {name: solr-log4shell,    dir: log4j/CVE-2021-44228,    expected: CVE-2021-44228, famous: true}
+  - {name: struts2-s2-045,    dir: struts2/s2-045,          expected: CVE-2017-5638,  famous: true}
+  - {name: php-cgi-5-4-1,     dir: php/CVE-2012-1823,       expected: CVE-2012-1823,  many_cves: true}
+  - {name: nginx-1-13-2,      dir: nginx/CVE-2017-7529,     expected: CVE-2017-7529,  many_cves: true}
+  - {name: redis-4-0-14,      dir: redis/4-unacc,           expected: null,           many_cves: true}

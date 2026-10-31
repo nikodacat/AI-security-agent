@@ -182,6 +182,36 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"      wrote {network_state_path.name}")
 
+    if args.banner_candidates or args.nvd_discovery:
+        from exposure_analyzer import candidates as cand_mod
+
+        def _say(m: str) -> None:
+            print(f"      {m}", file=sys.stderr)
+
+        net_obs: list[dict[str, Any]] = []
+        if network_state_path is not None:
+            try:
+                loaded = json.loads(network_state_path.read_text(encoding="utf-8"))
+                net_obs = loaded if isinstance(loaded, list) else []
+            except (json.JSONDecodeError, OSError):
+                net_obs = []
+        known = [f["cve_id"] for f in kev_findings]
+        if args.banner_candidates:
+            if net_obs:
+                kev_findings += cand_mod.banner_candidates(net_obs, existing_cve_ids=known, log=_say)
+            else:
+                print("      warning: --banner-candidates needs a network_state "
+                      "(--prober-target); skipped.", file=sys.stderr)
+        if args.nvd_discovery:
+            pkgs = list(inventory.packages) + cand_mod.banner_packages(cand_mod.banner_services(net_obs))
+            kev_findings += cand_mod.nvd_candidates(
+                pkgs, existing_cve_ids=[f["cve_id"] for f in kev_findings],
+                min_cvss=args.nvd_min_cvss, max_total=args.nvd_max_candidates, log=_say)
+        candidates_payload["kev_findings"] = kev_findings
+        candidates_path.write_text(
+            json.dumps(candidates_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"      candidates after discovery: {len(kev_findings)} -> {candidates_path.name}")
+
     if not kev_findings:
         print("[3/4] No KEV candidates to analyze -- writing empty verdicts.json and exiting.")
         verdicts_path.write_text(
@@ -223,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:
             print(f"      ERROR: analyzer failed: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
+        for cve_id, msg in agent.last_batch_errors:
+            print(f"      WARNING: no verdict for {cve_id}: {msg}", file=sys.stderr)
     else:
         # Fake engine: cve-matcher passthrough. Still respects the v2 flow so
         # scaffolding tests can exercise the whole chain without Claude.
@@ -340,6 +372,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--prober-ports", default="22,80,443,3306,6379,8000-8100",
                    help="Comma-separated ports for network-prober -p (default covers the eval-lab set). "
                         "Format matches nmap -p syntax.")
+    p.add_argument("--banner-candidates", action="store_true",
+                   help="v3-1: also analyse CVEs matched from service banners (needs --prober-target).")
+    p.add_argument("--nvd-discovery", action="store_true",
+                   help="v3-2 (experimental): also analyse CVEs NVD lists for the detected software, "
+                        "beyond CISA KEV. Needs network access to NVD; see --nvd-min-cvss.")
+    p.add_argument("--nvd-min-cvss", type=float, default=7.0,
+                   help="With --nvd-discovery: only CVEs at or above this CVSS base score (default 7.0).")
+    p.add_argument("--nvd-max-candidates", type=int, default=40,
+                   help="With --nvd-discovery: safety cap on NVD candidates, highest CVSS first "
+                        "(default 40; each candidate costs one model call).")
     p.add_argument("--attack-simulator", action="store_true",
                    help="Run attack-simulator after the analyzer to produce attack_narratives.{json,md}.")
     p.add_argument("--fix-publisher", action="store_true",
@@ -463,8 +505,10 @@ def _scan_to_inventory(container: str, scan: dict[str, Any]):
             name=a.get("DisplayName", ""),
             version=a.get("DisplayVersion", ""),
             vendor=(a.get("Publisher") or "").split("<")[0].strip(),
-            product=a.get("DisplayName", ""),
-            source="dpkg (via host-scanner)",
+            # Unmanaged-binary / ecosystem apps carry their own KEV-style
+            # Product and Source; dpkg apps have neither.
+            product=a.get("Product") or a.get("DisplayName", ""),
+            source=a.get("Source") or "dpkg (via host-scanner)",
         )
         for a in apps
         if a.get("DisplayName")
