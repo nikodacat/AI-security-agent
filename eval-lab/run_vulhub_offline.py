@@ -51,6 +51,16 @@ def compose_args(vdir: Path, proj: str, out: Path) -> list[str]:
     return ["docker", "compose", "-p", proj, "-f", str(base), "-f", str(over)]
 
 
+def pick_container(dc: list[str], vdir: Path) -> str:
+    """The container under test: the one built from a vulhub/ image when a scenario also runs
+    a database or cache next to it, else the first one compose lists."""
+    ids = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()
+    for cid in ids:
+        if sh(["docker", "inspect", "-f", "{{.Config.Image}}", cid]).stdout.strip().startswith("vulhub/"):
+            return cid
+    return ids[0]
+
+
 def wait_ready(cid: str, alias: str, timeout: int = 120) -> str:
     """Poll from eval-attacker until the container accepts a TCP connection on any port
     it exposes. A fixed sleep scanned Solr before it was up (it needs ~20 s) and made the
@@ -88,7 +98,7 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
         up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
         if not step("up", up.returncode == 0, up.stderr.strip()[-300:]):
             return rec
-        cid = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()[0]
+        cid = pick_container(dc, vdir)
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         rec["container"] = cname
         alias = proj
@@ -150,7 +160,7 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
         if up.returncode != 0:
             print(f"  [{name}] up FAILED {up.stderr.strip()[-200:]}", flush=True)
             return None
-        cid = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()[0]
+        cid = pick_container(dc, vdir)
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         sh(["docker", "network", "connect", "--alias", proj, NETWORK, cid])
         print(f"  [{name}] ready: {wait_ready(cid, proj)}", flush=True)
