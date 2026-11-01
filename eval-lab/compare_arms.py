@@ -44,21 +44,25 @@ def _parse() -> argparse.Namespace:
     p.add_argument("--arm", choices=("w9", "now", "nvd", "osv"), required=True)
     p.add_argument("--host-json", type=Path, required=True)
     p.add_argument("--network-state", type=Path, default=None)
-    p.add_argument("--engine", choices=("claude", "openai"), default="claude")
+    p.add_argument("--engine", choices=("claude", "openai"), default=None)
     p.add_argument("--base-url", default=None)
     p.add_argument("--model", default=None)
+    p.add_argument("--settings", type=Path, default=None,
+                   help="JSON file of tunables (see exposure_analyzer.settings); explicit flags win over it.")
+    p.add_argument("--no-prioritize", action="store_true",
+                   help="Judge candidates in discovery order instead of KEV-first, sources in rotation.")
     p.add_argument("--api-key", default=os.environ.get("QWEN_API_KEY"))
     p.add_argument("--timeout", type=float, default=240.0)
     p.add_argument("--retries", type=int, default=3)
     p.add_argument("--analyzer-root", type=Path, default=REPO_ROOT,
                    help="Repo root whose exposure-analyzer/ is imported (week-9 worktree for the w9 arm).")
     p.add_argument("--no-nvd", action="store_true", help="Skip the NVD version-range pass.")
-    p.add_argument("--nvd-min-cvss", type=float, default=7.0)
-    p.add_argument("--nvd-max", type=int, default=60, help="total cap per discovery source")
-    p.add_argument("--per-product", type=int, default=15, help="cap per product / library")
-    p.add_argument("--max-calls", type=int, default=60,
+    p.add_argument("--nvd-min-cvss", type=float, default=None)
+    p.add_argument("--nvd-max", type=int, default=None, help="total cap per discovery source")
+    p.add_argument("--per-product", type=int, default=None, help="cap per product / library")
+    p.add_argument("--max-calls", type=int, default=None,
                    help="Hard cap on model calls for this run (0 = no cap). Remaining candidates get no verdict.")
-    p.add_argument("--max-cost-usd", type=float, default=2.0,
+    p.add_argument("--max-cost-usd", type=float, default=None,
                    help="Hard cap on cost reported by the Claude SDK (0 = no cap). Checked before each call, "
                         "so a run can overshoot by one call.")
     p.add_argument("--candidates-only", action="store_true",
@@ -91,6 +95,22 @@ def main() -> int:
     sys.path.insert(0, str(REPO_ROOT / "cve-matcher"))
     sys.path.insert(0, str(HERE))
     import run_full_scan as drv  # adapters only; no scanning happens here
+    from exposure_analyzer import settings as settings_mod
+    from exposure_analyzer.ordering import order_for_budget
+    try:
+        cfg = settings_mod.load(a.settings, overrides={
+            "engine": a.engine, "model": a.model, "base_url": a.base_url, "min_cvss": a.nvd_min_cvss,
+            "max_per_source": a.nvd_max, "per_product": a.per_product, "max_calls": a.max_calls,
+            "max_cost_usd": a.max_cost_usd, "prioritize": False if a.no_prioritize else None})
+    except settings_mod.SettingsError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    a.engine, a.model, a.base_url = cfg.engine, cfg.model or a.model, cfg.base_url or a.base_url
+    a.nvd_min_cvss, a.nvd_max, a.per_product = cfg.min_cvss, cfg.max_per_source, cfg.per_product
+    a.max_calls, a.max_cost_usd = cfg.max_calls, cfg.max_cost_usd
+    if a.engine == "fake":
+        print("error: the fake engine is not supported by compare_arms", file=sys.stderr)
+        return 1
     # The w9 arm matches with the week-9 matcher too (its KEV cache is copied in).
     sys.path.insert(0, str(a.analyzer_root / "cve-matcher"))
     from cve_matcher import kev as kev_mod
@@ -201,9 +221,12 @@ def main() -> int:
             print(f"      model call {_calls[0]} took {time.time() - t:.0f}s "
                   f"(total {time.time() - _t_start:.0f}s)", file=sys.stderr, flush=True)
 
-    cfg = agent_mod.AgentConfig(run_probes=True)
-    runner = agent_mod.docker_exec_probe_runner(a.container, cfg)
-    agent = agent_mod.ExposureAgent(verdict_fn=verdict_fn, config=cfg, probe_runner=runner)
+    if cfg.prioritize:  # the call cap must not starve the sources built last
+        kev_findings = order_for_budget(kev_findings)
+    agent_cfg = agent_mod.AgentConfig(run_probes=cfg.run_probes, probe_timeout_sec=cfg.probe_timeout_sec,
+                                      max_output_chars=cfg.max_output_chars)
+    runner = agent_mod.docker_exec_probe_runner(a.container, agent_cfg)
+    agent = agent_mod.ExposureAgent(verdict_fn=verdict_fn, config=agent_cfg, probe_runner=runner)
 
     t0 = time.time()
     try:

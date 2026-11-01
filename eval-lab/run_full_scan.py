@@ -99,6 +99,27 @@ pre{{background:var(--bg);color:var(--text);border:1px solid var(--border);borde
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    from exposure_analyzer import settings as settings_mod
+    from exposure_analyzer.ordering import order_for_budget
+    try:
+        cfg = settings_mod.load(args.settings, overrides={
+            "engine": args.engine, "min_cvss": args.nvd_min_cvss, "per_product": args.per_product,
+            "max_per_source": args.nvd_max_candidates, "max_calls": args.max_calls,
+            "max_cost_usd": args.max_cost_usd,
+            "use_banner": True if args.banner_candidates else None,
+            "use_nvd": True if args.nvd_discovery else None,
+            "use_osv": True if args.osv_discovery else None,
+            "run_probes": False if args.no_probes else None,
+            "prioritize": False if args.no_prioritize else None})
+    except settings_mod.SettingsError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    if cfg.engine == "openai":
+        print("error: run_full_scan supports the fake and claude engines; use compare_arms for openai",
+              file=sys.stderr)
+        return 2
+    args.engine = cfg.engine
+    args.banner_candidates, args.nvd_discovery, args.osv_discovery = cfg.use_banner, cfg.use_nvd, cfg.use_osv
 
     # --v2 shortcut: turn on all three v2 stages + create a report if not given.
     if args.v2:
@@ -206,14 +227,14 @@ def main(argv: list[str] | None = None) -> int:
             pkgs = list(inventory.packages) + cand_mod.banner_packages(cand_mod.banner_services(net_obs))
             kev_findings += cand_mod.nvd_candidates(
                 pkgs, existing_cve_ids=[f["cve_id"] for f in kev_findings],
-                min_cvss=args.nvd_min_cvss, per_product=args.per_product,
-                max_total=args.nvd_max_candidates, log=_say)
+                min_cvss=cfg.min_cvss, per_product=cfg.per_product,
+                max_total=cfg.max_per_source, log=_say)
         if args.osv_discovery:
             libs = scan.get("scanners", {}).get("software", {}).get("libraries", [])
             kev_findings += cand_mod.osv_candidates(
                 libs, existing_cve_ids=[f["cve_id"] for f in kev_findings],
-                min_cvss=args.nvd_min_cvss, per_product=args.per_product,
-                max_total=args.nvd_max_candidates, log=_say)
+                min_cvss=cfg.min_cvss, per_product=cfg.per_product,
+                max_total=cfg.max_per_source, log=_say)
         candidates_payload["kev_findings"] = kev_findings
         candidates_path.write_text(
             json.dumps(candidates_payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -231,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
           + (f", with network_state" if network_state_path else "")
           + ") ...")
     from exposure_analyzer.agent import (
-        AgentConfig, ExposureAgent, build_claude_verdict_fn, docker_exec_probe_runner
+        AgentConfig, CallBudget, ExposureAgent, build_claude_verdict_fn, docker_exec_probe_runner
     )
     from exposure_analyzer.verdicts import dump_verdicts
 
@@ -249,10 +270,14 @@ def main(argv: list[str] | None = None) -> int:
             network_state = None
 
     if args.engine == "claude":
-        verdict_fn = build_claude_verdict_fn()
-        agent_cfg = AgentConfig(run_probes=not args.no_probes)
+        budget = CallBudget(max_calls=cfg.max_calls or None, max_cost_usd=cfg.max_cost_usd or None)
+        verdict_fn = build_claude_verdict_fn(budget)
+        agent_cfg = AgentConfig(run_probes=cfg.run_probes, probe_timeout_sec=cfg.probe_timeout_sec,
+                                max_output_chars=cfg.max_output_chars)
         probe_runner = docker_exec_probe_runner(args.container, agent_cfg)
         agent = ExposureAgent(verdict_fn=verdict_fn, config=agent_cfg, probe_runner=probe_runner)
+        if cfg.prioritize:  # the call cap must not starve the sources built last
+            kev_findings = order_for_budget(kev_findings)
         try:
             verdicts = asyncio.run(
                 agent.analyze_batch(kev_findings, host_state, network_state=network_state)
@@ -262,6 +287,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         for cve_id, msg in agent.last_batch_errors:
             print(f"      WARNING: no verdict for {cve_id}: {msg}", file=sys.stderr)
+        print(f"      model calls: {budget.calls}, spend ${budget.cost_usd:.3f}"
+              + (f", STOPPED BY BUDGET ({agent.stopped_by_budget}); {len(kev_findings) - len(verdicts)} "
+                 f"candidate(s) not judged" if agent.stopped_by_budget else ""))
     else:
         # Fake engine: cve-matcher passthrough. Still respects the v2 flow so
         # scaffolding tests can exercise the whole chain without Claude.
@@ -360,8 +388,16 @@ def _build_parser() -> argparse.ArgumentParser:
                                 description="End-to-end scan+match+analyze for one eval-lab container.")
     p.add_argument("--container", required=True,
                    help="Target container name (e.g. eval-web-vuln).")
-    p.add_argument("--engine", choices=("fake", "claude"), default="claude",
+    p.add_argument("--engine", choices=("fake", "claude"), default=None,
                    help="Verdict engine. Default: claude (real Agent SDK).")
+    p.add_argument("--settings", type=Path, default=None,
+                   help="JSON file of tunables (see exposure_analyzer.settings); explicit flags win over it.")
+    p.add_argument("--max-calls", type=int, default=None,
+                   help="Hard cap on model calls (0 = none). Each candidate costs one call. Default 60.")
+    p.add_argument("--max-cost-usd", type=float, default=None,
+                   help="Hard cap on spend as reported by the SDK (0 = none). Default 2.0.")
+    p.add_argument("--no-prioritize", action="store_true",
+                   help="Judge candidates in discovery order instead of KEV-first, sources in rotation.")
     p.add_argument("--check-versions", action="store_true",
                    help="Run cve-matcher's NVD version-check pass. Slower.")
     p.add_argument("--no-probes", action="store_true",
@@ -384,15 +420,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--nvd-discovery", action="store_true",
                    help="v3-2 (experimental): also analyse CVEs NVD lists for the detected software, "
                         "beyond CISA KEV. Needs network access to NVD; see --nvd-min-cvss.")
-    p.add_argument("--nvd-min-cvss", type=float, default=7.0,
+    p.add_argument("--nvd-min-cvss", type=float, default=None,
                    help="With --nvd-discovery: only CVEs at or above this CVSS base score (default 7.0).")
     p.add_argument("--osv-discovery", action="store_true",
                    help="v3-7 (experimental): also analyse CVEs OSV.dev lists for every library the "
                         "scanner found (jar, Composer, npm, PyPI), looked up by package coordinates.")
-    p.add_argument("--nvd-max-candidates", type=int, default=60,
+    p.add_argument("--nvd-max-candidates", type=int, default=None,
                    help="With --nvd-discovery / --osv-discovery: safety cap per discovery source "
                         "(default 60; each candidate costs one model call).")
-    p.add_argument("--per-product", type=int, default=15,
+    p.add_argument("--per-product", type=int, default=None,
                    help="With --nvd-discovery / --osv-discovery: at most this many candidates per "
                         "product or library, so one noisy product cannot crowd out the rest (default 15).")
     p.add_argument("--attack-simulator", action="store_true",
