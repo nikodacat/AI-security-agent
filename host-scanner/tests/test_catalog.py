@@ -159,5 +159,28 @@ class BinaryCatalog(unittest.TestCase):
         self.assertEqual(unmanaged.to_installed_apps(res)[0]["Cpe"], "samba:samba")
 
 
+class LinuxInventoryWithoutDpkg(unittest.TestCase):
+    """A RHEL-family image has no dpkg-query; the later passes must still run (Nexus did not)."""
+
+    def _scanner(self, which, sh):
+        from scanners.software import SoftwareScanner
+        sc = SoftwareScanner({"scanners": {"software": {}}})
+        sc._which = which
+        sc._sh = lambda script, timeout=60: sh(script)
+        sc._unmanaged_apps = lambda: [{"DisplayName": "extra", "DisplayVersion": "1.0"}]
+        return sc
+
+    def test_reads_rpm_when_dpkg_is_absent(self):
+        sc = self._scanner(lambda *n: "/usr/bin/rpm" if "rpm" in n else "",
+                           lambda script: "bash\t4.4.19-8.el8\tRed Hat\nopenssl\t1.1.1c-15.el8\tRed Hat\n"
+                           if "rpm -qa" in script else "")
+        apps = sc._get_installed_apps_linux()
+        self.assertEqual({a["DisplayName"] for a in apps}, {"bash", "openssl", "extra"})
+
+    def test_unmanaged_pass_still_runs_with_no_package_manager_at_all(self):
+        sc = self._scanner(lambda *n: "", lambda script: "")
+        self.assertEqual([a["DisplayName"] for a in sc._get_installed_apps_linux()], ["extra"])
+
+
 if __name__ == "__main__":
     unittest.main()

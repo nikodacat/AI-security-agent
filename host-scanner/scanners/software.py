@@ -25,8 +25,8 @@ Cross-platform note
 -------------------
 Inventory collection is platform-specific:
   Windows : registry walk under HKLM/HKCU Uninstall keys (PowerShell).
-  Linux   : ``dpkg-query -W`` (Debian/Ubuntu family). RPM-family support is
-            a future task.
+  Linux   : ``dpkg-query -W`` (Debian/Ubuntu) or ``rpm -qa`` (RHEL/CentOS/Fedora), then the
+            unmanaged-software and application-layer passes.
 The KEV / NVD engines are pure Python and work identically on both.
 """
 
@@ -136,16 +136,21 @@ $apps | ConvertTo-Json -Depth 2
             return []
 
     def _get_installed_apps_linux(self) -> list[dict[str, Any]]:
-        """Collect installed packages via dpkg-query (Debian/Ubuntu family).
+        """Collect installed packages via dpkg-query (Debian/Ubuntu) or rpm (RHEL/CentOS/Fedora).
 
         Produces the SAME shape as the Windows registry walk so the KEV
         engine and the legacy keyword engine consume one consistent format.
+        A host with neither package manager still gets the unmanaged-software and
+        application-layer passes: what the OS does not list is exactly what they are for.
         """
-        if not self._which("dpkg-query"):
-            return []
-        raw = self._sh(
-            "dpkg-query -W -f='${Package}\\t${Version}\\t${Maintainer}\\n' 2>/dev/null"
-        )
+        if self._which("dpkg-query"):
+            raw = self._sh(
+                "dpkg-query -W -f='${Package}\\t${Version}\\t${Maintainer}\\n' 2>/dev/null"
+            )
+        elif self._which("rpm"):
+            raw = self._sh("rpm -qa --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\t%{VENDOR}\\n' 2>/dev/null")
+        else:
+            raw = ""
         apps: list[dict[str, Any]] = []
         for line in raw.splitlines():
             parts = line.split("\t")
