@@ -25,6 +25,8 @@ import zipfile
 from dataclasses import dataclass, field
 from typing import Callable
 
+from . import catalog
+
 MAX_PER_ECOSYSTEM = 400
 MAX_WALK_DEPTH = 6
 HEADER_BYTES = 8192
@@ -38,6 +40,13 @@ PY_SITE_GLOBS = ("/usr/local/lib",)  # pip installs outside dpkg's dist-packages
 MAX_LIBRARIES = 2000          # per scan; OSV is queried once per (ecosystem, name, version)
 MAX_NESTED_JAR_BYTES = 30_000_000  # a bundled jar is read into memory to find its pom.properties
 NESTED_LIB_DIRS = ("WEB-INF/lib/", "BOOT-INF/lib/")  # war / Spring Boot fat jar
+# The whole-filesystem pass: bounded so a big host cannot make the scan run away.
+EVERYWHERE_DEPTH = 16
+MAX_WALK_DIRS = 300_000
+MAX_JARS_OPENED = 5000
+_PRUNE_AT_ROOT = {"proc", "sys", "dev", "run"}
+_PRUNE_NAMES = {"jvm", ".git", "__pycache__"}
+_JDK_PREFIXES = ("jdk", "openjdk", "jre")  # the JDK's own jars are not the application's
 
 # jar artifact name -> KEV product spelling
 JAR_PRODUCTS = {
@@ -64,11 +73,14 @@ JAR_PRODUCTS = {
 
 
 def _row(name: str, version: str, product: str, source: str, path: str,
-         publisher: str = "") -> dict:
-    return {
+         publisher: str = "", cpe: str = "") -> dict:
+    row = {
         "DisplayName": name, "DisplayVersion": version, "Publisher": publisher,
         "InstallDate": "", "Product": product, "Source": source, "Path": path,
     }
+    if cpe:
+        row["Cpe"] = cpe  # NVD "vendor:product", known to the catalog entry that recognised this
+    return row
 
 
 def parse_wp_core_version(text: str) -> str:
@@ -174,6 +186,8 @@ class Fs:
     isfile: Callable[[str], bool]
     # jar/war path -> [(groupId, artifactId, version)]; default finds none (fake filesystems in tests)
     jar_coords: Callable[[str], list[tuple[str, str, str]]] = lambda _p: []
+    # (jar path, member name) -> member text ("" when absent)
+    jar_read: Callable[[str, str], str] = lambda _p, _m: ""
 
 
 @dataclass
@@ -310,9 +324,94 @@ def _collect_pip(fs: Fs, result: EcosystemResult) -> None:
                 dirs[:] = []
 
 
+_SERVER_NUMBER_RE = re.compile(r"^server\.number=(\d+\.\d+\.\d+)", re.MULTILINE)
+
+
+def _handle_jar(fs: Fs, result: EcosystemResult, dirpath: str, fn: str, opened: list[int]) -> None:
+    path = _join(dirpath, fn)
+    coords: list[tuple[str, str, str]] = []
+    if opened[0] < MAX_JARS_OPENED:
+        opened[0] += 1
+        coords = fs.jar_coords(path)
+    for g, a, v in coords:
+        _add_library(result, "Maven", f"{g}:{a}", v, path)
+    if not coords and fn.endswith(".jar"):  # no pom.properties: the repository layout may name it
+        layout = catalog.maven_layout_coords(path)
+        if layout:
+            _add_library(result, "Maven", f"{layout[0]}:{layout[1]}", layout[2], path)
+    if not fn.endswith(".jar"):
+        return
+    parsed = parse_jar_name(fn)
+    if parsed and parsed[0] not in JAR_PRODUCTS:
+        entry = catalog.jar_entry(parsed[0])
+        if entry:
+            _add(result, "jar", _row(parsed[0], parsed[1], entry.product, "jar", path, cpe=entry.cpe))
+    if fn == "catalina.jar":  # Tomcat's jars carry no version in their names
+        m = _SERVER_NUMBER_RE.search(fs.jar_read(path, "org/apache/catalina/util/ServerInfo.properties"))
+        if m:
+            _add(result, "jar", _row("tomcat", m.group(1), "Tomcat", "jar", path, cpe="apache:tomcat"))
+
+
+def _collect_everywhere(fs: Fs, result: EcosystemResult) -> None:
+    """One pass over the whole filesystem for what the fixed-root collectors above can miss:
+    applications installed at /ofbiz or /node_modules, repositories deeper than their walk
+    depth, version files of well-known applications. Recognises files by what they are, not
+    by which directory they sit in."""
+    opened = [0]
+    for n, (dirpath, dirs, files) in enumerate(fs.walk("/", EVERYWHERE_DEPTH)):
+        if n >= MAX_WALK_DIRS:
+            result.notes.append(f"filesystem walk stopped after {MAX_WALK_DIRS} directories")
+            break
+        if dirpath in ("", "/"):
+            dirs[:] = [d for d in dirs if d not in _PRUNE_AT_ROOT]
+        dirs[:] = [d for d in dirs if d not in _PRUNE_NAMES and not d.startswith(_JDK_PREFIXES)]
+        base = os.path.basename(dirpath)
+
+        if base == "node_modules" and dirpath.count("/node_modules") == 1:
+            for entry in fs.listdir(dirpath):
+                names = ([f"{entry}/{sub}" for sub in fs.listdir(_join(dirpath, entry))]
+                         if entry.startswith("@") else [entry])
+                for name in names:
+                    pj = _join(dirpath, name, "package.json")
+                    parsed = parse_package_json(fs.read(pj)) if fs.isfile(pj) else None
+                    if parsed:
+                        _add(result, "npm", _row(parsed[0], parsed[1], parsed[0], "npm", dirpath))
+                        _add_library(result, "npm", parsed[0], parsed[1], dirpath)
+            dirs[:] = []
+            continue
+        if base == "site-packages":
+            for entry in fs.listdir(dirpath):
+                parsed = parse_dist_info(entry)
+                if parsed:
+                    _add(result, "pip", _row(parsed[0], parsed[1], parsed[0], "pip", dirpath))
+                    _add_library(result, "PyPI", parsed[0], parsed[1], dirpath)
+            dirs[:] = []
+            continue
+        if dirpath.endswith("vendor/composer") and "installed.json" in files:
+            src = os.path.dirname(os.path.dirname(dirpath))
+            for name, ver in parse_composer_installed(fs.read(_join(dirpath, "installed.json"))):
+                _add(result, "composer", _row(name, ver, name.split("/")[-1], "composer", src))
+                _add_library(result, "Packagist", name, ver, src)
+
+        for fn in files:
+            if fn.endswith((".jar", ".war")):
+                _handle_jar(fs, result, dirpath, fn, opened)
+                continue
+            full = _join(dirpath, fn)
+            probe = catalog.probe_for(full)
+            if probe:
+                ver = catalog.probe_version(probe, fs.read(full))
+                if ver:
+                    _add(result, "app-probe", _row(probe.product.lower(), ver, probe.product, "app-probe",
+                                                   full, cpe=probe.cpe))
+                    if probe.osv:
+                        _add_library(result, probe.osv[0], probe.osv[1], ver, full)
+
+
 def collect(fs: Fs) -> EcosystemResult:
     result = EcosystemResult()
-    for fn in (_collect_wordpress, _collect_composer, _collect_jars, _collect_npm, _collect_pip):
+    for fn in (_collect_wordpress, _collect_composer, _collect_jars, _collect_npm, _collect_pip,
+               _collect_everywhere):
         try:
             fn(fs, result)
         except Exception as e:  # one broken ecosystem must not hide the others
@@ -368,6 +467,15 @@ def _jar_coords_linux(path: str) -> list[tuple[str, str, str]]:
         return []
 
 
+def _jar_read_linux(path: str, member: str) -> str:
+    try:
+        with zipfile.ZipFile(path) as zf:
+            return zf.read(member)[:100_000].decode("utf-8", "replace")
+    except (KeyError, zipfile.BadZipFile, OSError):
+        return ""
+
+
 def linux_fs() -> Fs:
     return Fs(walk=_walk_linux, read=_read_linux, listdir=_listdir_linux,
-              isdir=os.path.isdir, isfile=os.path.isfile, jar_coords=_jar_coords_linux)
+              isdir=os.path.isdir, isfile=os.path.isfile, jar_coords=_jar_coords_linux,
+              jar_read=_jar_read_linux)

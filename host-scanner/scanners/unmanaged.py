@@ -41,29 +41,57 @@ class ProgramSpec:
     version_args: tuple[str, ...]  # argv after the binary that prints the version
     version_regex: str             # group 1 = version
     product: str                   # KEV product spelling (cve-matcher matches on it)
+    cpe: str = ""                  # NVD "vendor:product"; lets cve-matcher query NVD without a table
 
 
 # `product` strings are the CISA KEV spellings; vendor is left empty on purpose
 # so cve-matcher falls back to product-only matching (KEV spreads e.g. PHP over
 # two vendor names, "PHP Group" and "PHP").
 SPECS: tuple[ProgramSpec, ...] = (
-    ProgramSpec("php", ("php", "php-cgi"), ("-v",), r"PHP (\d+\.\d+\.\d+[^\s]*)", "PHP"),
+    ProgramSpec("php", ("php", "php-cgi"), ("-v",), r"PHP (\d+\.\d+\.\d+[^\s]*)", "PHP", "php:php"),
     ProgramSpec("php-fpm", ("php-fpm",), ("-v",), r"PHP (\d+\.\d+\.\d+[^\s]*)",
-                "FastCGI Process Manager (FPM)"),
+                "FastCGI Process Manager (FPM)", "php:php"),
     ProgramSpec("apache-httpd", ("httpd", "apache2"), ("-v",), r"Apache/(\d+\.\d+\.\d+)",
-                "HTTP Server"),
-    ProgramSpec("nginx", ("nginx",), ("-v",), r"nginx/(\d+\.\d+\.\d+)", "nginx"),
-    ProgramSpec("redis", ("redis-server",), ("--version",), r"v=(\d+\.\d+\.\d+)", "Redis"),
+                "HTTP Server", "apache:http_server"),
+    ProgramSpec("nginx", ("nginx",), ("-v",), r"nginx/(\d+\.\d+\.\d+)", "nginx", "f5:nginx"),
+    ProgramSpec("redis", ("redis-server",), ("--version",), r"v=(\d+\.\d+\.\d+)", "Redis", "redis:redis"),
     ProgramSpec("tomcat", ("catalina.sh",), ("version",), r"Server number:\s*(\d+\.\d+\.\d+)",
-                "Tomcat"),
+                "Tomcat", "apache:tomcat"),
     ProgramSpec("openssl", ("openssl",), ("version",), r"OpenSSL (\d+\.\d+\.\d+[a-z]*)",
-                "OpenSSL"),
-    ProgramSpec("exim", ("exim", "exim4"), ("-bV",), r"Exim version (\d+\.\d+(?:\.\d+)?)", "Exim"),
-    ProgramSpec("sudo", ("sudo",), ("-V",), r"Sudo version (\d+\.\d+\.\d+[^\s]*)", "Sudo"),
-    ProgramSpec("git", ("git",), ("--version",), r"git version (\d+\.\d+\.\d+)", "Git"),
-    ProgramSpec("ghostscript", ("gs",), ("--version",), r"^(\d+\.\d+(?:\.\d+)?)", "Ghostscript"),
+                "OpenSSL", "openssl:openssl"),
+    ProgramSpec("exim", ("exim", "exim4"), ("-bV",), r"Exim version (\d+\.\d+(?:\.\d+)?)", "Exim", "exim:exim"),
+    ProgramSpec("sudo", ("sudo",), ("-V",), r"Sudo version (\d+\.\d+\.\d+[^\s]*)", "Sudo", "sudo_project:sudo"),
+    ProgramSpec("git", ("git",), ("--version",), r"git version (\d+\.\d+\.\d+)", "Git", "git-scm:git"),
+    ProgramSpec("ghostscript", ("gs",), ("--version",), r"^(\d+\.\d+(?:\.\d+)?)", "Ghostscript",
+                "artifex:ghostscript"),
     ProgramSpec("imagemagick", ("convert", "magick"), ("-version",),
-                r"ImageMagick (\d+\.\d+\.\d+-?\d*)", "ImageMagick"),
+                r"ImageMagick (\d+\.\d+\.\d+-?\d*)", "ImageMagick", "imagemagick:imagemagick"),
+    # Common network daemons. The version flag and output shape are each project's documented
+    # one; entries marked UNVERIFIED have not been run against a real binary in this project.
+    ProgramSpec("samba", ("smbd",), ("-V",), r"Version (\d+\.\d+\.\d+)", "Samba", "samba:samba"),
+    ProgramSpec("postgresql", ("postgres",), ("--version",), r"\(PostgreSQL\) (\d+\.\d+(?:\.\d+)?)",
+                "PostgreSQL", "postgresql:postgresql"),
+    ProgramSpec("mongodb", ("mongod",), ("--version",), r"db version v(\d+\.\d+\.\d+)", "MongoDB",
+                "mongodb:mongodb"),
+    ProgramSpec("memcached", ("memcached",), ("-V",), r"memcached (\d+\.\d+\.\d+)", "Memcached",
+                "memcached:memcached"),
+    ProgramSpec("haproxy", ("haproxy",), ("-v",), r"HAProxy version (\d+\.\d+\.\d+)", "HAProxy",
+                "haproxy:haproxy"),
+    ProgramSpec("squid", ("squid",), ("-v",), r"Squid Cache: Version (\d+\.\d+(?:\.\d+)?)", "Squid",
+                "squid-cache:squid"),
+    ProgramSpec("vsftpd", ("vsftpd",), ("-v",), r"version (\d+\.\d+\.\d+)", "vsftpd",
+                "vsftpd_project:vsftpd"),
+    ProgramSpec("proftpd", ("proftpd",), ("-v",), r"Version (\d+\.\d+\.\d+[a-z]*)", "ProFTPD",
+                "proftpd:proftpd"),
+    ProgramSpec("dovecot", ("dovecot",), ("--version",), r"^(\d+\.\d+\.\d+)", "Dovecot", "dovecot:dovecot"),
+    ProgramSpec("openvpn", ("openvpn",), ("--version",), r"OpenVPN (\d+\.\d+\.\d+)", "OpenVPN",
+                "openvpn:openvpn"),
+    ProgramSpec("bind", ("named",), ("-v",), r"BIND (\d+\.\d+\.\d+)", "BIND", "isc:bind"),
+    ProgramSpec("dnsmasq", ("dnsmasq",), ("--version",), r"Dnsmasq version (\d+\.\d+)", "Dnsmasq",
+                "thekelleys:dnsmasq"),
+    ProgramSpec("lighttpd", ("lighttpd",), ("-v",), r"lighttpd/(\d+\.\d+\.\d+)", "lighttpd",
+                "lighttpd:lighttpd"),
+    ProgramSpec("nodejs", ("node",), ("--version",), r"^v(\d+\.\d+\.\d+)", "Node.js", "nodejs:node.js"),
 )
 
 _SPEC_BY_BINARY: dict[str, ProgramSpec] = {b: s for s in SPECS for b in s.binaries}
@@ -74,7 +102,7 @@ SEARCH_DIRS = (
     "/usr/local/bin", "/usr/local/sbin",
     "/usr/local/apache2/bin", "/usr/local/nginx/sbin", "/usr/local/php/bin",
 )
-WALK_ROOTS = ("/opt", "/srv")
+WALK_ROOTS = ("/opt", "/srv", "/usr/local")
 WALK_MAX_DEPTH = 4
 
 UNSAFE_PREFIXES = ("/tmp/", "/dev/shm/", "/var/tmp/")
@@ -162,6 +190,7 @@ def collect(probes: Probes) -> UnmanagedResult:
         result.binaries.append({
             "name": spec.key,
             "product": spec.product,
+            "cpe": spec.cpe,
             "version": version,
             "path": real,
             "running": bool(pids),
@@ -203,6 +232,7 @@ def to_installed_apps(result: UnmanagedResult) -> list[dict]:
             "Source": "unmanaged-binary",
             "Path": b["path"],
             "Running": b["running"],
+            **({"Cpe": b["cpe"]} if b.get("cpe") else {}),
         })
     return apps
 

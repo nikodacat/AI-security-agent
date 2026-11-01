@@ -522,6 +522,7 @@ def _scan_to_inventory(container: str, scan: dict[str, Any]):
             # Product and Source; dpkg apps have neither.
             product=a.get("Product") or a.get("DisplayName", ""),
             source=a.get("Source") or "dpkg (via host-scanner)",
+            cpe=a.get("Cpe") or "",
         )
         for a in apps
         if a.get("DisplayName")
