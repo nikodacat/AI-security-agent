@@ -49,6 +49,34 @@ def test_build_port_observation_drops_empty_banner() -> None:
     assert "banner" not in obs
 
 
+# --- service_guess fallback from nmap's own fields ----------------------------
+
+
+def _scan_with(info: dict) -> dict:
+    return {"t": {"tcp": {8080: dict({"state": "open", "product": "", "version": "", "extrainfo": ""}, **info)},
+                  "udp": {}, "error": None}}
+
+
+def test_service_without_a_parser_rule_uses_nmaps_product_and_version() -> None:
+    obs = observations_from_scan(_scan_with({"product": "Apache Tomcat", "version": "9.0.30"}))[0]
+    assert obs["service_guess"] == {"vendor": "Apache Tomcat", "product": "Apache Tomcat", "version": "9.0.30"}
+
+
+def test_parser_rule_still_wins_over_the_nmap_fallback() -> None:
+    obs = observations_from_scan(_scan_with({"product": "nginx", "version": "1.18.0"}))[0]
+    assert obs["service_guess"] == {"vendor": "nginx", "product": "nginx", "version": "1.18.0"}
+
+
+@pytest.mark.parametrize("info", [
+    {"product": "Apache Jserv", "version": ""},                 # no version
+    {"product": "", "version": "1.2"},                           # no product
+    {"product": "Jetty", "version": "unknown"},                  # not a version
+    {"product": "Jetty", "version": "x.y"},
+])
+def test_no_service_guess_when_nmap_gives_no_usable_version(info: dict) -> None:
+    assert "service_guess" not in observations_from_scan(_scan_with(info))[0]
+
+
 # --- observations_from_scan (fixture round-trip) ------------------------------
 
 

@@ -67,6 +67,20 @@ def _banner_from_nmap_port(port_info: dict) -> str | None:
     return banner or None
 
 
+def _guess_from_nmap(port_info: dict) -> dict | None:
+    """service_guess from nmap's own product/version fields, for services no parser rule knows.
+
+    nmap's -sV signature database already names the product; the parser table only exists to
+    normalise the few spellings the analyzer's KEV matching depends on. A version that does not
+    start with a digit ("1.x", "unknown", a hostname) is not a version.
+    """
+    product = (port_info.get("product") or "").strip()
+    version = (port_info.get("version") or "").strip()
+    if not product or not version or not version[0].isdigit():
+        return None
+    return {"vendor": product, "product": product, "version": version}
+
+
 def observations_from_scan(scan_results: dict) -> list[dict]:
     """Turn :func:`prober.scan_targets`'s output into PortObservation rows.
 
@@ -83,7 +97,7 @@ def observations_from_scan(scan_results: dict) -> list[dict]:
                 state = (info.get("state") or "").strip()
                 reachable = state in _STATE_REACHABLE
                 banner = _banner_from_nmap_port(info) if reachable else None
-                service_guess = parse_banner(banner) if banner else None
+                service_guess = (parse_banner(banner) or _guess_from_nmap(info)) if banner else None
                 observations.append(
                     build_port_observation(
                         target=target,

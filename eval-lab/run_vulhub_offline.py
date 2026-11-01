@@ -3,9 +3,9 @@
 For each scenario in vulhub_scenarios.yaml, one at a time (they share host ports):
   docker compose up -> join the eval-lab network -> copy in sec-agent-target ->
   host.json -> network_state.json (via eval-attacker) -> compare_arms.py
-  --candidates-only for the "now" and "nvd" arms -> docker compose down.
+  --candidates-only for the "now", "nvd" and "osv" arms -> docker compose down.
 
-Output: <out>/<scenario>/{host.json, network_state.json, candidates.{now,nvd}/result.json,
+Output: <out>/<scenario>/{host.json, network_state.json, candidates.{now,nvd,osv}/result.json,
 scenario.json}. scenario.json records whether each step worked, so a scenario the
 scanner cannot read (e.g. an Alpine image) is reported, not silently skipped.
 
@@ -113,7 +113,7 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
         if step("probe", pr.returncode == 0 and src.exists(), pr.stderr.strip()[-200:]):
             (out / "network_state.json").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
 
-        for arm in ("now", "nvd"):
+        for arm in ("now", "nvd", "osv"):
             d = out / f"candidates.{arm}"
             cmd = [sys.executable, str(HERE / "compare_arms.py"), "--container", cname, "--arm", arm,
                    "--host-json", str(out / "host.json"), "--candidates-only", "--out", str(d)]
@@ -172,8 +172,9 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--vulhub", type=Path, default=Path("C:/Users/ideal/vulhub"))
     ap.add_argument("--only", default="")
-    ap.add_argument("--ports", default="22,80,443,3306,6379,8000-8100,8983,9000-9100")
-    ap.add_argument("--analyze", choices=("now", "nvd"), default=None,
+    ap.add_argument("--ports", default="21,22,25,80,443,445,1433,2181,3306,5432,5672,6379,8000-8100,8161,8983,9000-9100,9200,9300,11211,27017,61616",
+                    help="common service ports; the prober reads whatever answers")
+    ap.add_argument("--analyze", choices=("now", "nvd", "osv"), default=None,
                     help="Model stage instead of the offline stage (needs the offline output).")
     ap.add_argument("--run", type=int, default=1)
     ap.add_argument("--max-calls", type=int, default=60, help="per scenario")

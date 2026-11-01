@@ -142,6 +142,63 @@ class TestCollect(unittest.TestCase):
         self.assertEqual(sum(1 for a in r.apps if a["Source"] == "jar"), eco.MAX_PER_ECOSYSTEM)
         self.assertTrue(any("truncated" in n for n in r.notes))
 
+    def test_pom_properties_parser(self):
+        body = "#Generated\ngroupId=org.apache.shiro\nartifactId=shiro-core\nversion=1.2.4\n"
+        self.assertEqual(eco.parse_pom_properties(body), ("org.apache.shiro", "shiro-core", "1.2.4"))
+        self.assertIsNone(eco.parse_pom_properties("groupId=x\nartifactId=y\n"))
+
+    def test_maven_coords_from_a_jar_and_from_jars_it_bundles(self):
+        import io
+        import os
+        import tempfile
+        import zipfile
+
+        def jar(coords, extra=None):
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as z:
+                for g, a, v in coords:
+                    z.writestr(f"META-INF/maven/{g}/{a}/pom.properties", f"groupId={g}\nartifactId={a}\nversion={v}\n")
+                for name, data in (extra or {}).items():
+                    z.writestr(name, data)
+            return buf.getvalue()
+
+        inner = jar([("org.apache.shiro", "shiro-core", "1.2.4")])
+        fat = jar([("com.example", "demo", "1.0")], {"BOOT-INF/lib/shiro-core-1.2.4.jar": inner,
+                                                      "BOOT-INF/lib/not-a-jar.jar": b"garbage"})
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "demo.jar")
+            with open(path, "wb") as fh:
+                fh.write(fat)
+            self.assertEqual(sorted(eco._jar_coords_linux(path)),
+                             [("com.example", "demo", "1.0"), ("org.apache.shiro", "shiro-core", "1.2.4")])
+            self.assertEqual(eco._jar_coords_linux(os.path.join(d, "missing.jar")), [])
+
+    def test_every_jar_with_coordinates_becomes_a_library_even_when_not_a_kev_product(self):
+        fs = _fake_fs({"/opt/app/lib/guava-30.0.jar": ""})
+        fs.jar_coords = lambda p: [("com.google.guava", "guava", "30.0")]
+        r = eco.collect(fs)
+        self.assertEqual(r.apps, [])  # not mappable to a KEV product, so not an installed app
+        self.assertEqual(r.libraries, [{"ecosystem": "Maven", "name": "com.google.guava:guava",
+                                        "version": "30.0", "path": "/opt/app/lib/guava-30.0.jar"}])
+
+    def test_composer_npm_pip_are_libraries_in_their_own_ecosystem_names(self):
+        fs = _fake_fs({
+            "/var/www/app/vendor/composer/installed.json": json.dumps(
+                {"packages": [{"name": "drupal/core", "version": "8.5.0"}]}),
+            "/var/www/app/node_modules/lodash/package.json": '{"name":"lodash","version":"4.17.20"}',
+            "/usr/local/lib/python3.9/site-packages/Django-3.2.4.dist-info/METADATA": "x",
+        })
+        got = {(l["ecosystem"], l["name"], l["version"]) for l in eco.collect(fs).libraries}
+        self.assertEqual(got, {("Packagist", "drupal/core", "8.5.0"), ("npm", "lodash", "4.17.20"),
+                               ("PyPI", "Django", "3.2.4")})
+
+    def test_library_list_is_capped(self):
+        fs = _fake_fs({"/opt/app/lib/a.jar": ""})
+        fs.jar_coords = lambda p: [("g", f"a{i}", "1.0") for i in range(eco.MAX_LIBRARIES + 5)]
+        r = eco.collect(fs)
+        self.assertEqual(len(r.libraries), eco.MAX_LIBRARIES)
+        self.assertIn("libraries truncated", r.notes)
+
     def test_one_failing_collector_does_not_hide_others(self):
         fs = _fake_fs({"/opt/app/lib/log4j-core-2.14.1.jar": ""})
         real_walk = fs.walk

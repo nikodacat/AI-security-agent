@@ -231,6 +231,7 @@ def nvd_candidates(
     *,
     existing_cve_ids: Iterable[str] = (),
     min_cvss: float | None = None,
+    per_product: int | None = None,
     max_total: int | None = None,
     api_key: str | None = None,
     discover_fn: Callable[..., list[dict[str, Any]]] | None = None,
@@ -245,6 +246,70 @@ def nvd_candidates(
     mod = _nvd_discovery_module()
     kwargs: dict[str, Any] = {"exclude_cve_ids": frozenset(existing_cve_ids), "api_key": api_key, "log": log}
     kwargs["min_cvss"] = mod.DEFAULT_MIN_CVSS if min_cvss is None else min_cvss
+    kwargs["per_product"] = mod.DEFAULT_PER_PRODUCT if per_product is None else per_product
     kwargs["max_total"] = mod.DEFAULT_MAX_TOTAL if max_total is None else max_total
     found = (discover_fn or mod.discover)(list(packages), **kwargs)
     return [nvd_candidate(f) for f in found]
+
+
+# --- OSV discovery (v3-7) ----------------------------------------------------
+
+def _osv_discovery_module():
+    _ensure_cve_matcher_importable()
+    from cve_matcher import osv_discovery  # type: ignore
+    return osv_discovery
+
+
+def osv_candidate(found: dict[str, Any]) -> dict[str, Any]:
+    """cve_matcher.osv_discovery result -> kev_findings-shaped candidate.
+
+    OSV was asked about this exact ecosystem coordinate and version, so the version
+    question is already answered; whether the vulnerable code is reachable in this
+    deployment is what the analyzer still has to judge.
+    """
+    score, sev = found["score"], found.get("severity", "")
+    where = f" at {found['path']}" if found.get("path") else ""
+    detail = (f"OSV lists {found['ecosystem']} package {found['name']} {found['version']}{where} as affected by "
+              f"{', '.join(found.get('advisories', []))} (CVSS {score:g}{' ' + sev if sev else ''}). "
+              "Not in CISA KEV: no known-exploited signal. A library on disk is not necessarily "
+              "loaded or reachable; judge that from the host and network evidence.")
+    return {
+        "cve_id": found["cve_id"],
+        "kev_name": f"OSV {found['cve_id']} (not in CISA KEV)",
+        "kev_vendor": found["ecosystem"],
+        "kev_product": found["name"],
+        "kev_description": found.get("description", ""),
+        "cwes": [],
+        "package_name": found["name"],
+        "package_version": found["version"],
+        "package_vendor": found["ecosystem"],
+        "package_source": found.get("path", ""),
+        "match_reason": "osv",
+        "match_score": 100.0,
+        "verdict": "vulnerable",
+        "verdict_detail": detail,
+        "ransomware_linked": False,
+        "source": "osv",
+        "cvss": score,
+    }
+
+
+def osv_candidates(
+    libraries: Iterable[dict[str, Any]],
+    *,
+    existing_cve_ids: Iterable[str] = (),
+    min_cvss: float | None = None,
+    per_product: int | None = None,
+    max_total: int | None = None,
+    discover_fn: Callable[..., list[dict[str, Any]]] | None = None,
+    log: Callable[[str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Candidates OSV lists for the scanner's `libraries`, skipping CVEs already known."""
+    mod = _osv_discovery_module()
+    kwargs: dict[str, Any] = {
+        "exclude_cve_ids": frozenset(existing_cve_ids), "log": log,
+        "min_cvss": mod.DEFAULT_MIN_CVSS if min_cvss is None else min_cvss,
+        "per_product": mod.DEFAULT_PER_PRODUCT if per_product is None else per_product,
+        "max_total": mod.DEFAULT_MAX_TOTAL if max_total is None else max_total,
+    }
+    return [osv_candidate(f) for f in (discover_fn or mod.discover)(list(libraries), **kwargs)]

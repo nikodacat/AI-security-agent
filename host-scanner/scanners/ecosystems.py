@@ -17,9 +17,11 @@ except for WordPress core where KEV uses vendor "WordPress" / product "Core".
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
+import zipfile
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -33,6 +35,9 @@ APP_ROOTS = ("/opt", "/srv", "/app", "/usr/local", "/var/lib", "/usr/share", "/h
              # and the layout org/apache/<group>/<artifact>/<ver>/ is too deep to reach from /root.
              "/root/.m2/repository")
 PY_SITE_GLOBS = ("/usr/local/lib",)  # pip installs outside dpkg's dist-packages
+MAX_LIBRARIES = 2000          # per scan; OSV is queried once per (ecosystem, name, version)
+MAX_NESTED_JAR_BYTES = 30_000_000  # a bundled jar is read into memory to find its pom.properties
+NESTED_LIB_DIRS = ("WEB-INF/lib/", "BOOT-INF/lib/")  # war / Spring Boot fat jar
 
 # jar artifact name -> KEV product spelling
 JAR_PRODUCTS = {
@@ -111,6 +116,31 @@ def parse_jar_name(filename: str) -> tuple[str, str] | None:
     return m.group("artifact"), m.group("ver")
 
 
+def parse_pom_properties(text: str) -> tuple[str, str, str] | None:
+    """(groupId, artifactId, version) from a META-INF/maven/<g>/<a>/pom.properties body."""
+    kv = {}
+    for line in (text or "").splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, _, v = line.partition("=")
+            kv[k.strip()] = v.strip()
+    g, a, v = kv.get("groupId"), kv.get("artifactId"), kv.get("version")
+    return (g, a, v) if g and a and v else None
+
+
+def maven_coords(zf: zipfile.ZipFile) -> list[tuple[str, str, str]]:
+    """Every Maven coordinate recorded in an open jar (a shaded jar carries several)."""
+    out = []
+    for name in zf.namelist():
+        if name.startswith("META-INF/maven/") and name.endswith("/pom.properties"):
+            try:
+                c = parse_pom_properties(zf.read(name)[:4096].decode("utf-8", "replace"))
+            except (KeyError, zipfile.BadZipFile, OSError):
+                continue
+            if c:
+                out.append(c)
+    return out[:50]
+
+
 def parse_package_json(text: str) -> tuple[str, str] | None:
     try:
         d = json.loads(text)
@@ -142,6 +172,8 @@ class Fs:
     listdir: Callable[[str], list[str]]   # dir -> names ([] on failure)
     isdir: Callable[[str], bool]
     isfile: Callable[[str], bool]
+    # jar/war path -> [(groupId, artifactId, version)]; default finds none (fake filesystems in tests)
+    jar_coords: Callable[[str], list[tuple[str, str, str]]] = lambda _p: []
 
 
 @dataclass
@@ -149,6 +181,9 @@ class EcosystemResult:
     apps: list[dict] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    # Package coordinates in a public advisory database's own naming (OSV): unlike `apps`, not
+    # limited to what we can map to a KEV product. [{ecosystem, name, version, path}]
+    libraries: list[dict] = field(default_factory=list)
     _seen: dict = field(default_factory=dict, repr=False)
 
 
@@ -170,6 +205,16 @@ def _add(result: EcosystemResult, kind: str, row: dict) -> None:
         return
     result.counts[kind] = n + 1
     result.apps.append(row)
+
+
+def _add_library(result: EcosystemResult, ecosystem: str, name: str, version: str, path: str) -> None:
+    key = ("lib", ecosystem, name, version)
+    if key in result._seen or len(result.libraries) >= MAX_LIBRARIES:
+        if len(result.libraries) == MAX_LIBRARIES and "libraries truncated" not in result.notes:
+            result.notes.append("libraries truncated")
+        return
+    result._seen[key] = True
+    result.libraries.append({"ecosystem": ecosystem, "name": name, "version": version, "path": path})
 
 
 def _join(*parts: str) -> str:
@@ -211,13 +256,18 @@ def _collect_composer(fs: Fs, result: EcosystemResult) -> None:
                 for name, ver in parse_composer_installed(fs.read(_join(dirpath, "installed.json"))):
                     product = name.split("/")[-1]
                     _add(result, "composer", _row(name, ver, product, "composer", src))
+                    _add_library(result, "Packagist", name, ver, src)
 
 
 def _collect_jars(fs: Fs, result: EcosystemResult) -> None:
     seen: set[tuple[str, str]] = set()
-    for root in APP_ROOTS:
-        for dirpath, _dirs, files in fs.walk(root, MAX_WALK_DEPTH):
+    # "/" itself, one level: images often drop the app jar at the filesystem root.
+    for root, depth in [(r, MAX_WALK_DEPTH) for r in APP_ROOTS] + [("/", 1)]:
+        for dirpath, _dirs, files in fs.walk(root, depth):
             for fn in files:
+                if fn.endswith((".jar", ".war")):
+                    for g, a, v in fs.jar_coords(_join(dirpath, fn)):
+                        _add_library(result, "Maven", f"{g}:{a}", v, _join(dirpath, fn))
                 if not fn.endswith(".jar"):
                     continue
                 parsed = parse_jar_name(fn)
@@ -244,6 +294,7 @@ def _collect_npm(fs: Fs, result: EcosystemResult) -> None:
                         parsed = parse_package_json(fs.read(pj))
                         if parsed:
                             _add(result, "npm", _row(parsed[0], parsed[1], parsed[0], "npm", dirpath))
+                            _add_library(result, "npm", parsed[0], parsed[1], dirpath)
                 dirs[:] = []  # do not descend into nested node_modules
 
 
@@ -255,6 +306,7 @@ def _collect_pip(fs: Fs, result: EcosystemResult) -> None:
                     parsed = parse_dist_info(entry)
                     if parsed:
                         _add(result, "pip", _row(parsed[0], parsed[1], parsed[0], "pip", dirpath))
+                        _add_library(result, "PyPI", parsed[0], parsed[1], dirpath)
                 dirs[:] = []
 
 
@@ -298,6 +350,24 @@ def _listdir_linux(path: str) -> list[str]:
         return []
 
 
+def _jar_coords_linux(path: str) -> list[tuple[str, str, str]]:
+    """Maven coordinates in a jar/war, including the jars it bundles under WEB-INF/lib or BOOT-INF/lib."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            out = maven_coords(zf)
+            for info in zf.infolist():
+                if (info.filename.startswith(NESTED_LIB_DIRS) and info.filename.endswith(".jar")
+                        and info.file_size <= MAX_NESTED_JAR_BYTES):
+                    try:
+                        with zipfile.ZipFile(io.BytesIO(zf.read(info))) as inner:
+                            out.extend(maven_coords(inner))
+                    except (zipfile.BadZipFile, OSError):
+                        continue
+            return out
+    except (zipfile.BadZipFile, OSError):
+        return []
+
+
 def linux_fs() -> Fs:
     return Fs(walk=_walk_linux, read=_read_linux, listdir=_listdir_linux,
-              isdir=os.path.isdir, isfile=os.path.isfile)
+              isdir=os.path.isdir, isfile=os.path.isfile, jar_coords=_jar_coords_linux)

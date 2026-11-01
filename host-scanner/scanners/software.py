@@ -65,6 +65,8 @@ class SoftwareScanner(BaseScanner):
         unmanaged = getattr(self, "unmanaged", None)
         if unmanaged and unmanaged.get("enabled"):
             out["unmanaged"] = unmanaged
+        if getattr(self, "libraries", None):
+            out["libraries"] = self.libraries
         return out
 
     def _run_inner(self) -> dict:
@@ -191,6 +193,7 @@ $apps | ConvertTo-Json -Depth 2
                 from . import ecosystems
                 eco = ecosystems.collect(ecosystems.linux_fs())
                 apps.extend(eco.apps)
+                self.libraries = eco.libraries
                 self.unmanaged["ecosystems"] = {"counts": eco.counts, "notes": eco.notes}
             except Exception as error:
                 self.unmanaged["ecosystems"] = {"error": f"{type(error).__name__}: {error}"}

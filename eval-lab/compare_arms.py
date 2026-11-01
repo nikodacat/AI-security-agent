@@ -7,7 +7,9 @@ An "arm" is a scanner output (host.json) plus an analyzer source tree:
   --arm now  host.json from the current scanner, analyzer from this tree,
              banner candidates ON (needs --network-state).
   --arm nvd  arm "now" plus NVD discovery (v3-2): CVEs NVD lists for the
-             detected software, CVSS >= --nvd-min-cvss, capped.
+             detected software, CVSS >= --nvd-min-cvss, capped per product.
+  --arm osv  arm "nvd" plus OSV discovery (v3-7): CVEs OSV lists for every library
+             the scanner found, looked up by its own package coordinates.
 
 Everything else is shared on purpose: KEV catalog, matcher adapters,
 network_state, probe runner (`docker exec`), model and prompts-per-tree.
@@ -39,7 +41,7 @@ REPO_ROOT = HERE.parent
 def _parse() -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="compare_arms.py")
     p.add_argument("--container", required=True)
-    p.add_argument("--arm", choices=("w9", "now", "nvd"), required=True)
+    p.add_argument("--arm", choices=("w9", "now", "nvd", "osv"), required=True)
     p.add_argument("--host-json", type=Path, required=True)
     p.add_argument("--network-state", type=Path, default=None)
     p.add_argument("--engine", choices=("claude", "openai"), default="claude")
@@ -52,7 +54,8 @@ def _parse() -> argparse.Namespace:
                    help="Repo root whose exposure-analyzer/ is imported (week-9 worktree for the w9 arm).")
     p.add_argument("--no-nvd", action="store_true", help="Skip the NVD version-range pass.")
     p.add_argument("--nvd-min-cvss", type=float, default=7.0)
-    p.add_argument("--nvd-max", type=int, default=40)
+    p.add_argument("--nvd-max", type=int, default=60, help="total cap per discovery source")
+    p.add_argument("--per-product", type=int, default=15, help="cap per product / library")
     p.add_argument("--max-calls", type=int, default=60,
                    help="Hard cap on model calls for this run (0 = no cap). Remaining candidates get no verdict.")
     p.add_argument("--max-cost-usd", type=float, default=2.0,
@@ -109,7 +112,7 @@ def main() -> int:
         network_state = json.loads(a.network_state.read_text(encoding="utf-8"))
 
     n_inventory = len(kev_findings)
-    if a.arm in ("now", "nvd"):
+    if a.arm in ("now", "nvd", "osv"):
         if network_state is None:
             print("error: --arm now requires --network-state", file=sys.stderr)
             return 1
@@ -122,15 +125,23 @@ def main() -> int:
         )
         kev_findings = kev_findings + extra
     n_banner = len(kev_findings) - n_inventory
-    if a.arm == "nvd":
+    if a.arm in ("nvd", "osv"):
         from exposure_analyzer import candidates as cand_mod
         pkgs = list(inventory.packages) + cand_mod.banner_packages(cand_mod.banner_services(network_state))
         kev_findings = kev_findings + cand_mod.nvd_candidates(
             pkgs, existing_cve_ids=[f["cve_id"] for f in kev_findings],
-            min_cvss=a.nvd_min_cvss, max_total=a.nvd_max, log=lambda m: print(m, file=sys.stderr))
+            min_cvss=a.nvd_min_cvss, per_product=a.per_product, max_total=a.nvd_max,
+            log=lambda m: print(m, file=sys.stderr))
     n_nvd = len(kev_findings) - n_inventory - n_banner
+    if a.arm == "osv":
+        libs = scan.get("scanners", {}).get("software", {}).get("libraries", [])
+        kev_findings = kev_findings + cand_mod.osv_candidates(
+            libs, existing_cve_ids=[f["cve_id"] for f in kev_findings],
+            min_cvss=a.nvd_min_cvss, per_product=a.per_product, max_total=a.nvd_max,
+            log=lambda m: print(m, file=sys.stderr))
+    n_osv = len(kev_findings) - n_inventory - n_banner - n_nvd
     print(f"[{a.container}/{a.arm}/{a.engine}] candidates: {n_inventory} from inventory"
-          f" + {n_banner} from banners + {n_nvd} from NVD", file=sys.stderr)
+          f" + {n_banner} from banners + {n_nvd} from NVD + {n_osv} from OSV", file=sys.stderr)
 
     if a.candidates_only:
         cands = [{"cve_id": f["cve_id"], "source": f.get("source", "inventory"),

@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"      wrote {network_state_path.name}")
 
-    if args.banner_candidates or args.nvd_discovery:
+    if args.banner_candidates or args.nvd_discovery or args.osv_discovery:
         from exposure_analyzer import candidates as cand_mod
 
         def _say(m: str) -> None:
@@ -206,7 +206,14 @@ def main(argv: list[str] | None = None) -> int:
             pkgs = list(inventory.packages) + cand_mod.banner_packages(cand_mod.banner_services(net_obs))
             kev_findings += cand_mod.nvd_candidates(
                 pkgs, existing_cve_ids=[f["cve_id"] for f in kev_findings],
-                min_cvss=args.nvd_min_cvss, max_total=args.nvd_max_candidates, log=_say)
+                min_cvss=args.nvd_min_cvss, per_product=args.per_product,
+                max_total=args.nvd_max_candidates, log=_say)
+        if args.osv_discovery:
+            libs = scan.get("scanners", {}).get("software", {}).get("libraries", [])
+            kev_findings += cand_mod.osv_candidates(
+                libs, existing_cve_ids=[f["cve_id"] for f in kev_findings],
+                min_cvss=args.nvd_min_cvss, per_product=args.per_product,
+                max_total=args.nvd_max_candidates, log=_say)
         candidates_payload["kev_findings"] = kev_findings
         candidates_path.write_text(
             json.dumps(candidates_payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -379,9 +386,15 @@ def _build_parser() -> argparse.ArgumentParser:
                         "beyond CISA KEV. Needs network access to NVD; see --nvd-min-cvss.")
     p.add_argument("--nvd-min-cvss", type=float, default=7.0,
                    help="With --nvd-discovery: only CVEs at or above this CVSS base score (default 7.0).")
-    p.add_argument("--nvd-max-candidates", type=int, default=40,
-                   help="With --nvd-discovery: safety cap on NVD candidates, highest CVSS first "
-                        "(default 40; each candidate costs one model call).")
+    p.add_argument("--osv-discovery", action="store_true",
+                   help="v3-7 (experimental): also analyse CVEs OSV.dev lists for every library the "
+                        "scanner found (jar, Composer, npm, PyPI), looked up by package coordinates.")
+    p.add_argument("--nvd-max-candidates", type=int, default=60,
+                   help="With --nvd-discovery / --osv-discovery: safety cap per discovery source "
+                        "(default 60; each candidate costs one model call).")
+    p.add_argument("--per-product", type=int, default=15,
+                   help="With --nvd-discovery / --osv-discovery: at most this many candidates per "
+                        "product or library, so one noisy product cannot crowd out the rest (default 15).")
     p.add_argument("--attack-simulator", action="store_true",
                    help="Run attack-simulator after the analyzer to produce attack_narratives.{json,md}.")
     p.add_argument("--fix-publisher", action="store_true",

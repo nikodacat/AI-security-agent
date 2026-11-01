@@ -55,16 +55,16 @@ class NvdCandidatesFacade(unittest.TestCase):
             return [_found(packages[0])]
 
         pkg = Package(name="redis", version="6.2.6")
-        out = nvd_candidates([pkg], existing_cve_ids=["CVE-A"], min_cvss=8.0, max_total=5,
+        out = nvd_candidates([pkg], existing_cve_ids=["CVE-A"], min_cvss=8.0, per_product=3, max_total=5,
                              discover_fn=fake_discover)
         self.assertEqual([c["cve_id"] for c in out], ["CVE-2022-0778"])
-        self.assertEqual((seen["min_cvss"], seen["max_total"], seen["n"]), (8.0, 5, 1))
+        self.assertEqual((seen["min_cvss"], seen["per_product"], seen["max_total"], seen["n"]), (8.0, 3, 5, 1))
         self.assertEqual(seen["exclude_cve_ids"], frozenset({"CVE-A"}))
 
     def test_defaults_come_from_the_discovery_module(self):
         seen = {}
         nvd_candidates([], discover_fn=lambda p, **kw: seen.update(kw) or [])
-        self.assertEqual((seen["min_cvss"], seen["max_total"]), (7.0, 40))
+        self.assertEqual((seen["min_cvss"], seen["per_product"], seen["max_total"]), (7.0, 15, 60))
 
 
 if __name__ == "__main__":
