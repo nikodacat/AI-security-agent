@@ -52,13 +52,16 @@ def compose_args(vdir: Path, proj: str, out: Path) -> list[str]:
 
 
 def pick_container(dc: list[str], vdir: Path) -> str:
-    """The container under test: the one built from a vulhub/ image when a scenario also runs
-    a database or cache next to it, else the first one compose lists."""
-    ids = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()
-    for cid in ids:
-        if sh(["docker", "inspect", "-f", "{{.Config.Image}}", cid]).stdout.strip().startswith("vulhub/"):
-            return cid
-    return ids[0]
+    """The container under test: among the running ones, prefer a vulhub/ image that exposes a
+    port (a stack may also run a database, a cache, or an init job that has already exited)."""
+    ids = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()   # `ps` lists running containers only
+
+    def score(cid: str) -> tuple[int, int]:
+        img = sh(["docker", "inspect", "-f", "{{.Config.Image}}", cid]).stdout.strip()
+        ports = sh(["docker", "inspect", "-f", "{{len .Config.ExposedPorts}}", cid]).stdout.strip()
+        return (img.startswith("vulhub/"), int(ports or 0) > 0)
+
+    return max(ids, key=score)
 
 
 def wait_ready(cid: str, alias: str, timeout: int = 120) -> str:
@@ -118,7 +121,8 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
 
         pr = sh(["docker", "exec", "eval-attacker", "python", "-m", "network_prober", "scan",
                  "--target", alias, "--ports", ports, "--output", f"/prober-output/{alias}.net.json",
-                 "--schema", "/repo/docs/schemas/network_state.schema.json"], timeout=240)
+                 "--timeout", "900",  # the default 60 s abandons a whole-range scan with no result
+                 "--schema", "/repo/docs/schemas/network_state.schema.json"], timeout=1000)
         src = HERE / "prober-output" / f"{alias}.net.json"
         if step("probe", pr.returncode == 0 and src.exists(), pr.stderr.strip()[-200:]):
             (out / "network_state.json").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
@@ -182,8 +186,8 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--vulhub", type=Path, default=Path("C:/Users/ideal/vulhub"))
     ap.add_argument("--only", default="")
-    ap.add_argument("--ports", default="21,22,25,80,443,445,1433,2181,3306,5432,5672,6379,8000-8100,8161,8983,9000-9100,9200,9300,11211,27017,61616",
-                    help="common service ports; the prober reads whatever answers")
+    ap.add_argument("--ports", default="1-65535",
+                    help="nmap -p syntax; the whole range, so no service depends on a hand-picked port list")
     ap.add_argument("--analyze", choices=("now", "nvd", "osv"), default=None,
                     help="Model stage instead of the offline stage (needs the offline output).")
     ap.add_argument("--run", type=int, default=1)
