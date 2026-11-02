@@ -299,9 +299,9 @@ for m in host-scanner exposure-analyzer network-prober attack-simulator fix-publ
 done
 ```
 
-481 tests across the six packages at the time of writing (host-scanner 91,
-exposure-analyzer 189, network-prober 35, attack-simulator 67, fix-publisher
-84, cve-matcher 15).
+569 tests across the six packages at the time of writing (host-scanner 119,
+exposure-analyzer 207, network-prober 41, attack-simulator 67, fix-publisher
+84, cve-matcher 51).
 
 ## Not tracked here
 
