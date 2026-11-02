@@ -69,3 +69,22 @@ scenarios:
   - {name: zabbix-3-0-3,      dir: zabbix/CVE-2016-10134,    expected: CVE-2016-10134, heldout2: true, image: "vulhub/zabbix:3.0.3-web"}
   - {name: superset-2-0-1,    dir: superset/CVE-2023-27524,  expected: CVE-2023-27524, heldout2: true}
   - {name: nacos-1-4-0,       dir: nacos/CVE-2021-29441,     expected: CVE-2021-29441, heldout2: true}
+
+  # Held-out set 3 (2026-11-03). Chosen by `pick_heldout3.py` (committed alongside) BEFORE any image
+  # was pulled, scanned or run, and with no result for these ten in existence. Rule: pool = Vulhub
+  # dirs named CVE-*, pinned image, no `build:`, product family not used in sets 1-2; shuffle with
+  # random.Random(20261103); take the first ten with a distinct product whose vulhub/* images are
+  # each <= 1000 MB compressed (only polkit was skipped, for size). Nothing was picked for how the
+  # tool is expected to do: the draw happens to contain no Ruby and no guaranteed Alpine image, and
+  # it is not redrawn. This is the last blind set before the feature freeze (~2026-11-10): report
+  # the first run as it comes out and change no scanner or matcher code before reporting it.
+  - {name: minio-2023-02-27,   dir: minio/CVE-2023-28432,        expected: CVE-2023-28432, heldout3: true}
+  - {name: gradio-4-12-0,      dir: gradio/CVE-2024-1561,        expected: CVE-2024-1561,  heldout3: true}
+  - {name: jumpserver-3-6-3,   dir: jumpserver/CVE-2023-42820,   expected: CVE-2023-42820, heldout3: true, image: "vulhub/jumpserver:3.6.3"}
+  - {name: metabase-0-46-6,    dir: metabase/CVE-2023-38646,     expected: CVE-2023-38646, heldout3: true}
+  - {name: 1panel-1-10-10,     dir: 1panel/CVE-2024-39907,       expected: CVE-2024-39907, heldout3: true}
+  - {name: coldfusion-2018-0-15, dir: coldfusion/CVE-2023-29300, expected: CVE-2023-29300, heldout3: true}
+  - {name: geoserver-2-17-2,   dir: geoserver/CVE-2022-24816,    expected: CVE-2022-24816, heldout3: true}
+  - {name: jimureport-1-6-0,   dir: jimureport/CVE-2023-4450,    expected: CVE-2023-4450,  heldout3: true, image: "vulhub/jimureport:1.6.0"}
+  - {name: druid-0-20-0,       dir: apache-druid/CVE-2021-25646, expected: CVE-2021-25646, heldout3: true}
+  - {name: elfinder-2-1-58,    dir: elfinder/CVE-2021-32682,     expected: CVE-2021-32682, heldout3: true}
