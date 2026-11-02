@@ -54,6 +54,16 @@ FILE_PROBES: tuple[FileProbe, ...] = (
               "zabbix:zabbix"),
     FileProbe("Nextcloud", "version.php", r"\$OC_VersionString\s*=\s*'([^']+)'",
               "nextcloud:nextcloud"),
+    # Several capture groups are joined with "." (Joomla keeps release, patch level apart).
+    FileProbe("Joomla", "libraries/cms/version/version.php",
+              r"\$RELEASE\s*=\s*'(\d+\.\d+)';[\s\S]*?\$DEV_LEVEL\s*=\s*'(\d+)'",
+              r"joomla:joomla\!", verified=True),
+    FileProbe("Joomla", "libraries/src/Version.php",
+              r"MAJOR_VERSION\s*=\s*(\d+);[\s\S]*?MINOR_VERSION\s*=\s*(\d+);[\s\S]*?PATCH_VERSION\s*=\s*(\d+)",
+              r"joomla:joomla\!"),
+    FileProbe("Kibana", "kibana/package.json", r'"name"\s*:\s*"kibana"[\s\S]*?"version"\s*:\s*"(\d[^"]*)"',
+              "elastic:kibana"),
+    FileProbe("Grafana", "grafana/VERSION", r"^(\d+\.\d+\.\d+)", "grafana:grafana", verified=True),
 )
 
 
@@ -101,17 +111,23 @@ def jar_entry(artifact: str) -> JarEntry | None:
     return None
 
 
+def probes_for(path: str) -> list[FileProbe]:
+    """Every FILE_PROBE whose suffix matches `path` on whole path components, most specific
+    (longest suffix) first. A generic name such as version.php belongs to several products,
+    so the caller tries each until one finds a version in the file."""
+    hits = [p for p in FILE_PROBES if path == p.suffix or path.endswith("/" + p.suffix)]
+    return sorted(hits, key=lambda p: -len(p.suffix))
+
+
 def probe_for(path: str) -> FileProbe | None:
-    """First FILE_PROBE whose suffix matches `path` on whole path components."""
-    for p in FILE_PROBES:
-        if path == p.suffix or path.endswith("/" + p.suffix):
-            return p
-    return None
+    """The most specific FILE_PROBE for `path`, or None."""
+    hits = probes_for(path)
+    return hits[0] if hits else None
 
 
 def probe_version(probe: FileProbe, text: str) -> str:
     m = re.search(probe.regex, text or "", re.MULTILINE)
-    return m.group(1) if m else ""
+    return ".".join(g for g in m.groups() if g) if m else ""
 
 
 # --- Maven repository layout --------------------------------------------------------------

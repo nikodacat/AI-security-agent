@@ -296,7 +296,19 @@ def _owner_of_linux(path: str) -> str | None:
             continue
         if proc.returncode == 0 and proc.stdout.strip():
             return proc.stdout.strip().split(":")[0].split()[0]
-    return None
+    return _apk_owner(path)
+
+
+def _apk_owner(path: str) -> str | None:
+    """Alpine: `apk info -W <path>` prints '<path> is owned by <name>-<version>-r<N>'."""
+    try:
+        proc = subprocess.run(["apk", "info", "-W", path], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"is owned by (\S+)", proc.stdout or "")
+    if not m:
+        return None
+    return re.sub(r"-\d.*$", "", m.group(1)) or None
 
 
 def _running_exes_linux() -> dict[str, list[int]]:

@@ -15,7 +15,7 @@ from test_ecosystems import _fake_fs
 class CatalogReaders(unittest.TestCase):
     def test_every_probe_regex_compiles_and_has_one_group(self):
         for p in catalog.FILE_PROBES:
-            self.assertEqual(re.compile(p.regex).groups, 1, p.product)
+            self.assertIn(re.compile(p.regex).groups, (1, 2, 3), p.product)
             self.assertEqual(p.cpe.count(":"), 1, p.product)
 
     def test_drupal_and_phpmyadmin_version_files(self):
@@ -123,6 +123,77 @@ class WholeFilesystemPass(unittest.TestCase):
         eco._collect_everywhere(fs, r)
         self.assertLessEqual(len(calls), eco.MAX_WALK_DIRS + 2)
         self.assertTrue(any("stopped after" in n for n in r.notes))
+
+
+class RubyGemsAndApk(unittest.TestCase):
+    def test_gemspec_file_names(self):
+        f = eco.parse_gemspec_filename
+        self.assertEqual(f("actionpack-5.0.7.gemspec"), ("actionpack", "5.0.7"))
+        self.assertEqual(f("rack-test-0.6.3.gemspec"), ("rack-test", "0.6.3"))
+        self.assertEqual(f("nokogiri-1.10.4-x86_64-linux.gemspec"), ("nokogiri", "1.10.4"))
+        self.assertEqual(f("rails-6.0.0.rc1.gemspec"), ("rails", "6.0.0.rc1"))
+        self.assertIsNone(f("README.md"))
+
+    def test_gems_in_a_bundle_become_rubygems_libraries(self):
+        fs = _fake_fs({"/usr/local/bundle/specifications/rails-5.0.7.gemspec": "",
+                       "/usr/local/bundle/specifications/rack-test-0.6.3.gemspec": ""})
+        got = {(l["ecosystem"], l["name"], l["version"]) for l in eco.collect(fs).libraries}
+        self.assertEqual(got, {("RubyGems", "rails", "5.0.7"), ("RubyGems", "rack-test", "0.6.3")})
+
+    def test_default_gems_under_specifications_default_are_read_too(self):
+        fs = _fake_fs({"/usr/local/lib/ruby/gems/2.5.0/specifications/default/json-2.1.0.gemspec": ""})
+        self.assertIn(("RubyGems", "json", "2.1.0"),
+                      {(l["ecosystem"], l["name"], l["version"]) for l in eco.collect(fs).libraries})
+
+    def test_apk_database_is_parsed_into_name_version_maintainer(self):
+        from scanners.software import parse_apk_db
+        db = ("C:Q1abc=\nP:musl\nV:1.1.18-r3\nA:x86_64\nm:Timo <t@x.org>\n\n"
+              "P:openssl\nV:1.0.2n-r0\n\nP:broken-no-version\n\n")
+        self.assertEqual(parse_apk_db(db).splitlines(), ["musl\t1.1.18-r3\tTimo <t@x.org>", "openssl\t1.0.2n-r0\t"])
+        self.assertEqual(parse_apk_db(""), "")
+
+    def test_alpine_inventory_comes_from_the_apk_database(self):
+        from scanners.software import SoftwareScanner
+        sc = SoftwareScanner({"scanners": {"software": {}}})
+        sc._which = lambda *n: ""
+        sc._sh = lambda script, timeout=60: "P:busybox\nV:1.27.2-r7\n" if "lib/apk/db/installed" in script else ""
+        sc._unmanaged_apps = lambda: []
+        self.assertEqual([(a["DisplayName"], a["DisplayVersion"]) for a in sc._get_installed_apps_linux()],
+                         [("busybox", "1.27.2-r7")])
+
+
+class EditableInstalls(unittest.TestCase):
+    def test_pkg_info_header(self):
+        self.assertEqual(eco.parse_pkg_info("Metadata-Version: 2.1\nName: apache-superset\nVersion: 2.0.1\n"),
+                         ("apache-superset", "2.0.1"))
+        self.assertIsNone(eco.parse_pkg_info("Name: only-a-name\n"))
+
+    def test_egg_info_outside_site_packages_is_a_pypi_library(self):
+        fs = _fake_fs({"/app/apache_superset.egg-info/PKG-INFO": "Name: apache-superset\nVersion: 2.0.1\n"})
+        self.assertIn(("PyPI", "apache-superset", "2.0.1"),
+                      {(l["ecosystem"], l["name"], l["version"]) for l in eco.collect(fs).libraries})
+
+
+class MultiGroupAndSharedFileNames(unittest.TestCase):
+    def test_joomla_release_and_patch_level_are_joined(self):
+        p = catalog.probe_for("/var/www/html/libraries/cms/version/version.php")
+        text = "public $RELEASE = '3.4';\n public $DEV_LEVEL = '5';"
+        self.assertEqual((p.product, catalog.probe_version(p, text)), ("Joomla", "3.4.5"))
+        p4 = catalog.probe_for("/var/www/html/libraries/src/Version.php")
+        self.assertEqual(catalog.probe_version(
+            p4, "const MAJOR_VERSION = 4;\n const MINOR_VERSION = 2;\n const PATCH_VERSION = 7;"), "4.2.7")
+
+    def test_a_shared_file_name_tries_every_product_until_one_finds_a_version(self):
+        fs = _fake_fs({"/srv/cloud/version.php": "$OC_VersionString = '23.0.1';"})
+        row = next(a for a in eco.collect(fs).apps if a["Source"] == "app-probe")
+        self.assertEqual((row["Product"], row["DisplayVersion"]), ("Nextcloud", "23.0.1"))
+
+    def test_kibana_and_grafana_version_files(self):
+        kb = catalog.probe_for("/usr/share/kibana/package.json")
+        self.assertEqual(catalog.probe_version(kb, '{\n "name": "kibana",\n "version": "5.6.12",\n}'), "5.6.12")
+        self.assertIsNone(catalog.probe_for("/usr/share/other/package.json"))
+        gf = catalog.probe_for("/usr/share/grafana/VERSION")
+        self.assertEqual(catalog.probe_version(gf, "8.2.6\n"), "8.2.6")
 
 
 class BinaryCatalog(unittest.TestCase):

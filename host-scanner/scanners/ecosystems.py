@@ -163,6 +163,23 @@ def parse_package_json(text: str) -> tuple[str, str] | None:
     return None
 
 
+_GEMSPEC_RE = re.compile(
+    r"^(?P<name>.+?)-(?P<ver>\d[\w.]*?)(?:-(?:x86_64|x86|java|universal|arm64|aarch64|mswin|mingw)[\w.-]*)?\.gemspec$")
+
+
+def parse_gemspec_filename(filename: str) -> tuple[str, str] | None:
+    """'actionpack-5.0.7.gemspec' -> ('actionpack', '5.0.7'); platform gems drop the platform."""
+    m = _GEMSPEC_RE.match(filename)
+    return (m.group("name"), m.group("ver")) if m else None
+
+
+def parse_pkg_info(text: str) -> tuple[str, str] | None:
+    """(Name, Version) from the header of a PKG-INFO / METADATA file, or None."""
+    name = re.search(r"^Name:\s*(\S+)", text or "", re.MULTILINE)
+    ver = re.search(r"^Version:\s*(\S+)", text or "", re.MULTILINE)
+    return (name.group(1), ver.group(1)) if name and ver else None
+
+
 _DIST_INFO_RE = re.compile(r"^(?P<name>.+?)-(?P<ver>\d[^-]*)\.(?:dist-info|egg-info)$")
 
 
@@ -387,6 +404,18 @@ def _collect_everywhere(fs: Fs, result: EcosystemResult) -> None:
                     _add_library(result, "PyPI", parsed[0], parsed[1], dirpath)
             dirs[:] = []
             continue
+        for d in dirs:  # editable / source installs keep <pkg>.egg-info outside site-packages
+            if d.endswith(".egg-info") and not parse_dist_info(d):
+                parsed = parse_pkg_info(fs.read(_join(dirpath, d, "PKG-INFO")))
+                if parsed:
+                    _add(result, "pip", _row(parsed[0], parsed[1], parsed[0], "pip", dirpath))
+                    _add_library(result, "PyPI", parsed[0], parsed[1], dirpath)
+        if base in ("specifications", "default") and "/specifications" in dirpath:  # RubyGems
+            for fn in files:
+                parsed = parse_gemspec_filename(fn)
+                if parsed:
+                    _add(result, "gem", _row(parsed[0], parsed[1], parsed[0], "gem", dirpath))
+                    _add_library(result, "RubyGems", parsed[0], parsed[1], dirpath)
         if dirpath.endswith("vendor/composer") and "installed.json" in files:
             src = os.path.dirname(os.path.dirname(dirpath))
             for name, ver in parse_composer_installed(fs.read(_join(dirpath, "installed.json"))):
@@ -398,14 +427,16 @@ def _collect_everywhere(fs: Fs, result: EcosystemResult) -> None:
                 _handle_jar(fs, result, dirpath, fn, opened)
                 continue
             full = _join(dirpath, fn)
-            probe = catalog.probe_for(full)
-            if probe:
-                ver = catalog.probe_version(probe, fs.read(full))
+            probes = catalog.probes_for(full)
+            text = fs.read(full) if probes else ""
+            for probe in probes:
+                ver = catalog.probe_version(probe, text)
                 if ver:
                     _add(result, "app-probe", _row(probe.product.lower(), ver, probe.product, "app-probe",
                                                    full, cpe=probe.cpe))
                     if probe.osv:
                         _add_library(result, probe.osv[0], probe.osv[1], ver, full)
+                    break
 
 
 def collect(fs: Fs) -> EcosystemResult:

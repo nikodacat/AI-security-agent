@@ -27,6 +27,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 BINARY = REPO / "target-agent" / "dist" / "sec-agent-target-glibc217"  # glibc >= 2.17: runs on Vulhub-era jessie/stretch
+BINARY_MUSL = REPO / "target-agent" / "dist" / "sec-agent-target-musl"    # Alpine
 NETWORK = "eval-lab_evallab"
 ENV = dict(os.environ, MSYS_NO_PATHCONV="1", PYTHONIOENCODING="utf-8")
 
@@ -51,10 +52,17 @@ def compose_args(vdir: Path, proj: str, out: Path) -> list[str]:
     return ["docker", "compose", "-p", proj, "-f", str(base), "-f", str(over)]
 
 
-def pick_container(dc: list[str], vdir: Path) -> str:
-    """The container under test: among the running ones, prefer a vulhub/ image that exposes a
-    port (a stack may also run a database, a cache, or an init job that has already exited)."""
+def pick_container(dc: list[str], vdir: Path, image: str | None = None) -> str:
+    """The container under test. When the scenario names its `image` (a stack with several
+    vulhub/ images, e.g. Kibana + Elasticsearch, where the CVE is in only one of them) take that
+    one. Otherwise, among the running ones, prefer a vulhub/ image that exposes a port (a stack
+    may also run a database, a cache, or an init job that has already exited)."""
     ids = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()   # `ps` lists running containers only
+    if image:
+        named = [c for c in ids if sh(["docker", "inspect", "-f", "{{.Config.Image}}", c]).stdout.strip() == image]
+        if not named:
+            raise RuntimeError(f"no running container with image {image}")
+        return named[0]
 
     def score(cid: str) -> tuple[int, int]:
         img = sh(["docker", "inspect", "-f", "{{.Config.Image}}", cid]).stdout.strip()
@@ -101,14 +109,16 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
         up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
         if not step("up", up.returncode == 0, up.stderr.strip()[-300:]):
             return rec
-        cid = pick_container(dc, vdir)
+        cid = pick_container(dc, vdir, sc.get("image"))
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         rec["container"] = cname
         alias = proj
         sh(["docker", "network", "connect", "--alias", alias, NETWORK, cid])
         step("ready", True, wait_ready(cid, alias))
 
-        sh(["docker", "cp", str(BINARY), f"{cname}:/tmp/sec-agent-target"])
+        musl = sh(["docker", "exec", cname, "sh", "-c", "ls /lib/ld-musl-* 2>/dev/null"]).returncode == 0
+        sh(["docker", "cp", str(BINARY_MUSL if musl else BINARY), f"{cname}:/tmp/sec-agent-target"])
+        rec["binary"] = "musl" if musl else "glibc217"
         sc_run = sh(["docker", "exec", cname, "/tmp/sec-agent-target"], timeout=240)
         try:
             scan = json.loads(sc_run.stdout)
@@ -164,7 +174,7 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
         if up.returncode != 0:
             print(f"  [{name}] up FAILED {up.stderr.strip()[-200:]}", flush=True)
             return None
-        cid = pick_container(dc, vdir)
+        cid = pick_container(dc, vdir, sc.get("image"))
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         sh(["docker", "network", "connect", "--alias", proj, NETWORK, cid])
         print(f"  [{name}] ready: {wait_ready(cid, proj)}", flush=True)

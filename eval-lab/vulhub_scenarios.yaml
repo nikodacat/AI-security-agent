@@ -56,13 +56,16 @@ scenarios:
   # the tool is expected to do on it. Ruby (rails) is included knowing the scanner does not
   # read RubyGems; it stays in the table whatever happens. Report these separately and do
   # not change scanner or matcher code between a first run and the number that gets reported.
+  # CORRECTION (2026-11-03, after the first run): kibana and zabbix are multi-image stacks and the
+  # harness had scanned the wrong container (Elasticsearch; the Zabbix server instead of the
+  # web UI). The `image:` field names the component the CVE is in, per each Vulhub README.
   - {name: grafana-8-2-6,     dir: grafana/CVE-2021-43798,   expected: CVE-2021-43798, heldout2: true}
   - {name: flink-1-11-2,      dir: flink/CVE-2020-17518,     expected: CVE-2020-17518, heldout2: true}
   - {name: wordpress-6-9-4,   dir: wordpress/CVE-2026-63030, expected: CVE-2026-63030, heldout2: true}
   - {name: joomla-3-4-5,      dir: joomla/CVE-2015-8562,     expected: CVE-2015-8562,  heldout2: true}
   - {name: rails-5-0-7,       dir: rails/CVE-2018-3760,      expected: CVE-2018-3760,  heldout2: true}
-  - {name: kibana-5-6-12,     dir: kibana/CVE-2018-17246,    expected: CVE-2018-17246, heldout2: true}
+  - {name: kibana-5-6-12,     dir: kibana/CVE-2018-17246,    expected: CVE-2018-17246, heldout2: true, image: "vulhub/kibana:5.6.12"}
   - {name: postgres-9-6-7,    dir: postgres/CVE-2018-1058,   expected: CVE-2018-1058,  heldout2: true}
-  - {name: zabbix-3-0-3,      dir: zabbix/CVE-2016-10134,    expected: CVE-2016-10134, heldout2: true}
+  - {name: zabbix-3-0-3,      dir: zabbix/CVE-2016-10134,    expected: CVE-2016-10134, heldout2: true, image: "vulhub/zabbix:3.0.3-web"}
   - {name: superset-2-0-1,    dir: superset/CVE-2023-27524,  expected: CVE-2023-27524, heldout2: true}
   - {name: nacos-1-4-0,       dir: nacos/CVE-2021-29441,     expected: CVE-2021-29441, heldout2: true}

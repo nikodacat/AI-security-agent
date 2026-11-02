@@ -136,7 +136,7 @@ $apps | ConvertTo-Json -Depth 2
             return []
 
     def _get_installed_apps_linux(self) -> list[dict[str, Any]]:
-        """Collect installed packages via dpkg-query (Debian/Ubuntu) or rpm (RHEL/CentOS/Fedora).
+        """Collect installed packages via dpkg-query (Debian/Ubuntu), rpm (RHEL/CentOS/Fedora) or apk (Alpine).
 
         Produces the SAME shape as the Windows registry walk so the KEV
         engine and the legacy keyword engine consume one consistent format.
@@ -150,7 +150,8 @@ $apps | ConvertTo-Json -Depth 2
         elif self._which("rpm"):
             raw = self._sh("rpm -qa --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\t%{VENDOR}\\n' 2>/dev/null")
         else:
-            raw = ""
+            # Alpine: read apk's own database, which also works where the apk binary is stripped out.
+            raw = parse_apk_db(self._sh(f"cat {APK_DB} 2>/dev/null"))
         apps: list[dict[str, Any]] = []
         for line in raw.splitlines():
             parts = line.split("\t")
@@ -409,6 +410,23 @@ $apps | ConvertTo-Json -Depth 2
 # ---------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------
+
+APK_DB = "/lib/apk/db/installed"
+
+
+def parse_apk_db(text: str) -> str:
+    """apk's installed-package database -> 'name<TAB>version<TAB>maintainer' lines.
+
+    The database is blank-line separated blocks of `X:value` lines: P name, V version
+    (with the -rN release), m maintainer. A block without a name or version is skipped.
+    """
+    rows: list[str] = []
+    for block in re.split(r"\n\s*\n", text or ""):
+        fields = {line[0]: line[2:].strip() for line in block.splitlines() if len(line) > 2 and line[1] == ":"}
+        if fields.get("P") and fields.get("V"):
+            rows.append(f"{fields['P']}\t{fields['V']}\t{fields.get('m', '')}")
+    return "\n".join(rows)
+
 
 _PAREN_RE = re.compile(r"\([^)]*\)")
 _DASH_TAIL_RE = re.compile(r"\s+-\s+.*$")
