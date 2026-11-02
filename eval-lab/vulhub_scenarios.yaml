@@ -46,3 +46,23 @@ scenarios:
   - {name: spring-cloud-gateway-3-1-0, dir: spring/CVE-2022-22947, expected: CVE-2022-22947, heldout: true}
   - {name: solr-8-2-0,        dir: solr/CVE-2019-17558,     expected: CVE-2019-17558, heldout: true}
   - {name: saltstack-2019-2-3, dir: saltstack/CVE-2020-11651, expected: CVE-2020-11651, heldout: true}
+
+  # Held-out set 2 (2026-11-03). The first twelve held-out scenarios were tuned against, so they
+  # are development data now. These ten were chosen and committed BEFORE any image was pulled,
+  # scanned or run, and before any result for them exists. Rule, fixed in advance: one product
+  # family per language/ecosystem the scanner reads or is meant to read (Go, Java, PHP, Ruby,
+  # Node/npm, C daemon, PyPI, hand-installed web apps), taking the first CVE-named directory
+  # in alphabetical order that pins an image (no `build:`), so no scenario was picked for how
+  # the tool is expected to do on it. Ruby (rails) is included knowing the scanner does not
+  # read RubyGems; it stays in the table whatever happens. Report these separately and do
+  # not change scanner or matcher code between a first run and the number that gets reported.
+  - {name: grafana-8-2-6,     dir: grafana/CVE-2021-43798,   expected: CVE-2021-43798, heldout2: true}
+  - {name: flink-1-11-2,      dir: flink/CVE-2020-17518,     expected: CVE-2020-17518, heldout2: true}
+  - {name: wordpress-6-9-4,   dir: wordpress/CVE-2026-63030, expected: CVE-2026-63030, heldout2: true}
+  - {name: joomla-3-4-5,      dir: joomla/CVE-2015-8562,     expected: CVE-2015-8562,  heldout2: true}
+  - {name: rails-5-0-7,       dir: rails/CVE-2018-3760,      expected: CVE-2018-3760,  heldout2: true}
+  - {name: kibana-5-6-12,     dir: kibana/CVE-2018-17246,    expected: CVE-2018-17246, heldout2: true}
+  - {name: postgres-9-6-7,    dir: postgres/CVE-2018-1058,   expected: CVE-2018-1058,  heldout2: true}
+  - {name: zabbix-3-0-3,      dir: zabbix/CVE-2016-10134,    expected: CVE-2016-10134, heldout2: true}
+  - {name: superset-2-0-1,    dir: superset/CVE-2023-27524,  expected: CVE-2023-27524, heldout2: true}
+  - {name: nacos-1-4-0,       dir: nacos/CVE-2021-29441,     expected: CVE-2021-29441, heldout2: true}
