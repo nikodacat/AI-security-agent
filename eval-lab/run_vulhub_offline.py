@@ -159,7 +159,8 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
 
 
 def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
-                max_calls: int, max_cost: float, engine: str = "claude", model: str = "", sample: int = 0, seed: int = 0) -> dict | None:
+                max_calls: int, max_cost: float, engine: str = "claude", model: str = "", sample: int = 0, seed: int = 0,
+                confirmed_from: str = "") -> dict | None:
     """Model stage for one scenario: container up (probes run against it), reuse the
     host.json / network_state.json from the offline stage, then compare_arms.py."""
     name, vdir = sc["name"], vulhub / sc["dir"]
@@ -168,6 +169,13 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
         print(f"  [{name}] no offline output; run the offline stage first", flush=True)
         return None
     res_dir = out / f"{engine}.{arm}.r{run}"
+    only_ids = ""
+    if confirmed_from:  # judge again exactly the CVEs another run called CONFIRMED
+        prev = json.loads((out / confirmed_from / "result.json").read_text(encoding="utf-8"))
+        only_ids = ",".join(v["cve_id"] for v in prev["verdicts"] if v["verdict"] == "CONFIRMED")
+        if not only_ids:  # an empty list would mean 'judge everything' downstream
+            print(f"  [{name}] no CONFIRMED verdicts in {confirmed_from}; nothing to re-judge", flush=True)
+            return None
     dc = compose_args(vdir, proj, out)
     try:
         up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
@@ -181,7 +189,8 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
         cp = sh([sys.executable, str(HERE / "compare_arms.py"), "--container", cname, "--arm", arm,
                  "--host-json", str(out / "host.json"), "--network-state", str(out / "network_state.json"),
                  "--engine", engine, *(["--model", model] if model else []),
-                 *(["--judge-cves", sc["expected"], "--sample", str(sample), "--seed", str(seed)] if sample else []),
+                 *(["--judge-cves", only_ids] if confirmed_from else
+                   ["--judge-cves", sc["expected"], "--sample", str(sample), "--seed", str(seed)] if sample else []),
                  "--max-calls", str(max_calls), "--max-cost-usd", str(max_cost),
                  "--run", str(run), "--out", str(res_dir)], timeout=3600)
         (out / f"{engine}.{arm}.r{run}.log").write_text(cp.stderr, encoding="utf-8")
@@ -208,6 +217,8 @@ def main() -> int:
     ap.add_argument("--sample", type=int, default=0,
                     help="Model stage: judge the expected CVE plus this many seeded-random other candidates.")
     ap.add_argument("--seed", type=int, default=20261104)
+    ap.add_argument("--confirmed-from", default="",
+                    help="Model stage: judge only the CVEs that this earlier run dir (e.g. agy.osv.r3) called CONFIRMED.")
     ap.add_argument("--max-calls", type=int, default=60, help="per scenario")
     ap.add_argument("--max-cost-usd", type=float, default=1.5, help="per scenario")
     ap.add_argument("--max-total-usd", type=float, default=2.0,
@@ -225,7 +236,7 @@ def main() -> int:
                 print(f"  total cap ${a.max_total_usd:.2f} reached (spent ${spent:.2f}); skipping", flush=True)
                 continue
             r = analyze_one(sc, a.vulhub, a.out / sc["name"], a.analyze, a.run, a.max_calls, a.max_cost_usd,
-                            a.engine, a.model, a.sample, a.seed)
+                            a.engine, a.model, a.sample, a.seed, a.confirmed_from)
             spent += (r or {}).get("cost_usd") or 0.0
             print(f"  running total ${spent:.3f}", flush=True)
         else:
