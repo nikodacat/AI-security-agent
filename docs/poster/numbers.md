@@ -92,6 +92,7 @@ Model stage on OSV candidates (3 scenarios): expected CVE CONFIRMED in nginx, Ac
 | Random sample of other candidates: CONFIRMED | 76 of 150 (51%) | 15 per scenario, seed 20261104, drawn over all candidates |
 | Same sample: MITIGATED_BY_CONFIG / NO_EVIDENCE / MITIGATED_BY_EXPOSURE / NOT_RUNNING | 45 / 15 / 8 / 6 | |
 | What the 76 CONFIRMED reasons rest on | 76 cite an open port, 10 a probe, 4 that the code is loaded or used | read from the reasons, not verified against the targets |
+| Same Argon run repeated (r5 vs r3, same model, same 153 calls, no errors) | same verdict 131 of 153 (86%, kappa 0.78); CONFIRMED 79 then 78, in both 72; CONFIRMED-or-not agrees 140 of 153; expected CVEs 3 of 3 CONFIRMED both times | run-to-run noise of one model, not accuracy; the biggest swings are in the two scenarios with no exposed port (jimureport 2 -> 0, minio 2 -> 0) |
 | Claude re-judging the same 79 CONFIRMED (Argon: 3 expected + 76 sampled) | still CONFIRMED 54 (68%); not 25 (NO_EVIDENCE 14, MITIGATED_BY_CONFIG 9, other 2); expected CVEs 3 of 3 still CONFIRMED | $2.51, 80 calls, 1 run; agreement is not correctness (see PROJECT_STATE v3-12) |
 
 CONFIRMED here means "affected version present on a host with a reachable service" (e.g. curl 7.81 on a host whose
