@@ -458,6 +458,64 @@ def build_openai_compatible_verdict_fn(
     return _call
 
 
+AGY_DEFAULT_PATH = "C:/Users/ideal/AppData/Local/agy/bin/agy.exe"
+# Windows caps a command line at 32k characters; agy takes the prompt as an argument.
+_AGY_MAX_PROMPT_CHARS = 28000
+
+
+def build_agy_verdict_fn(
+    model: str = "gemini-3.8-flash-medium",
+    agy_path: str | None = None,
+    timeout: float = 180.0,
+) -> VerdictFn:
+    """Return a VerdictFn backed by the `agy` CLI (Antigravity).
+
+    agy is an agent, not a completions endpoint, so each call runs in a fresh
+    empty directory with ``--mode plan`` and an instruction not to use tools;
+    the system and user prompt are joined into the single ``-p`` argument. The
+    reply is read from ``--output-format json``. agy reports tokens but no
+    dollars, so a CallBudget on this engine only enforces the call cap.
+    Every call carries about 20k tokens of agy's own overhead.
+    """
+    import asyncio
+    import os
+    import shutil
+    import tempfile
+
+    exe = agy_path or os.environ.get("AGY_PATH") or AGY_DEFAULT_PATH
+
+    async def _call(system_prompt: str, user_prompt: str) -> str:
+        prompt = (f"{system_prompt}\n\n---\n\n{user_prompt}\n\n---\n"
+                  "Answer with the JSON object only. Do not use any tools or read any files.")
+        if len(prompt) > _AGY_MAX_PROMPT_CHARS:
+            raise RuntimeError(f"agy prompt is {len(prompt)} chars, over the {_AGY_MAX_PROMPT_CHARS} limit")
+        workdir = tempfile.mkdtemp(prefix="agy-verdict-")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                exe, "-p", prompt, "--model", model, "--mode", "plan",
+                "--output-format", "json", "--new-project",
+                cwd=workdir, stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            try:
+                out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                raise RuntimeError(f"agy timed out after {timeout:.0f}s")
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+        try:
+            data = json.loads(out.decode("utf-8", errors="replace"))
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"agy returned non-JSON (rc={proc.returncode}): "
+                               f"{(out or err).decode('utf-8', errors='replace')[:200]}") from e
+        if data.get("status") != "SUCCESS":
+            raise RuntimeError(f"agy status {data.get('status')}: {str(data)[:200]}")
+        return data.get("response", "")
+
+    return _call
+
+
 def _extract_text(msg: Any) -> str:  # pragma: no cover -- exercised only in live runs
     content = getattr(msg, "content", None)
     if isinstance(content, str):

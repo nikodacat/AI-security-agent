@@ -44,7 +44,7 @@ def _parse() -> argparse.Namespace:
     p.add_argument("--arm", choices=("w9", "now", "nvd", "osv"), required=True)
     p.add_argument("--host-json", type=Path, required=True)
     p.add_argument("--network-state", type=Path, default=None)
-    p.add_argument("--engine", choices=("claude", "openai"), default=None)
+    p.add_argument("--engine", choices=("claude", "openai", "agy"), default=None)
     p.add_argument("--base-url", default=None)
     p.add_argument("--model", default=None)
     p.add_argument("--settings", type=Path, default=None,
@@ -65,6 +65,13 @@ def _parse() -> argparse.Namespace:
     p.add_argument("--max-cost-usd", type=float, default=None,
                    help="Hard cap on cost reported by the Claude SDK (0 = no cap). Checked before each call, "
                         "so a run can overshoot by one call.")
+    p.add_argument("--judge-cves", default="",
+                   help="Comma-separated CVE ids always judged (when they are candidates). With --sample, "
+                        "these are judged in addition to the random draw; without it, only these are judged.")
+    p.add_argument("--sample", type=int, default=0,
+                   help="Judge a seeded random draw of N other candidates instead of all of them "
+                        "(the draw is made over candidates sorted by CVE id, so it does not depend on discovery order).")
+    p.add_argument("--seed", type=int, default=0)
     p.add_argument("--candidates-only", action="store_true",
                    help="Stop after building candidates; no model call, no quota. "
                         "result.json then has verdict=null for every candidate.")
@@ -190,6 +197,9 @@ def main() -> int:
     if a.engine == "claude":
         verdict_fn = agent_mod.build_claude_verdict_fn(budget) if budget else agent_mod.build_claude_verdict_fn()
         model = "claude"
+    elif a.engine == "agy":
+        model = a.model or "gemini-3.8-flash-medium"
+        verdict_fn = _retrying(agent_mod.build_agy_verdict_fn(model=model, timeout=max(a.timeout, 180.0)), a.retries)
     else:
         if not (a.base_url and a.model):
             print("error: --engine openai needs --base-url and --model", file=sys.stderr)
@@ -223,6 +233,19 @@ def main() -> int:
 
     if cfg.prioritize:  # the call cap must not starve the sources built last
         kev_findings = order_for_budget(kev_findings)
+    all_findings, selection = kev_findings, None
+    if a.judge_cves or a.sample:
+        import random
+        always = {c for c in a.judge_cves.split(",") if c}
+        forced = [f for f in all_findings if f["cve_id"] in always]
+        rest = sorted((f for f in all_findings if f["cve_id"] not in always), key=lambda f: f["cve_id"])
+        drawn = random.Random(a.seed).sample(rest, min(a.sample, len(rest))) if a.sample else []
+        kev_findings = forced + drawn
+        selection = {"seed": a.seed, "sample": a.sample, "forced": [f["cve_id"] for f in forced],
+                     "drawn": [f["cve_id"] for f in drawn], "forced_not_candidates": sorted(always - {f["cve_id"] for f in forced}),
+                     "pool": len(rest)}
+        print(f"      judging {len(forced)} named + {len(drawn)} sampled of {len(all_findings)} candidates",
+              file=sys.stderr)
     agent_cfg = agent_mod.AgentConfig(run_probes=cfg.run_probes, probe_timeout_sec=cfg.probe_timeout_sec,
                                       max_output_chars=cfg.max_output_chars)
     runner = agent_mod.docker_exec_probe_runner(a.container, agent_cfg)
@@ -239,7 +262,7 @@ def main() -> int:
 
     by_id = {v.cve_id: v for v in verdicts}
     cands = []
-    for f in kev_findings:
+    for f in all_findings:
         v = by_id.get(f["cve_id"])
         cands.append({
             "cve_id": f["cve_id"],
@@ -253,7 +276,7 @@ def main() -> int:
         "n_calls": budget.calls if budget else None,
         "cost_usd": round(budget.cost_usd, 4) if budget else None,
         "stopped_by_budget": getattr(agent, "stopped_by_budget", ""),
-        "n_candidates": len(kev_findings), "candidates": cands,
+        "n_candidates": len(all_findings), "selection": selection, "candidates": cands,
         "verdicts": [{"cve_id": v.cve_id, "verdict": v.verdict.value, "reason": v.reason} for v in verdicts],
     }
     (a.out / "result.json").write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")

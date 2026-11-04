@@ -159,7 +159,7 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
 
 
 def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
-                max_calls: int, max_cost: float) -> dict | None:
+                max_calls: int, max_cost: float, engine: str = "claude", model: str = "", sample: int = 0, seed: int = 0) -> dict | None:
     """Model stage for one scenario: container up (probes run against it), reuse the
     host.json / network_state.json from the offline stage, then compare_arms.py."""
     name, vdir = sc["name"], vulhub / sc["dir"]
@@ -167,7 +167,7 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
     if not (out / "host.json").exists() or not (out / "network_state.json").exists():
         print(f"  [{name}] no offline output; run the offline stage first", flush=True)
         return None
-    res_dir = out / f"claude.{arm}.r{run}"
+    res_dir = out / f"{engine}.{arm}.r{run}"
     dc = compose_args(vdir, proj, out)
     try:
         up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
@@ -180,9 +180,11 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
         print(f"  [{name}] ready: {wait_ready(cid, proj)}", flush=True)
         cp = sh([sys.executable, str(HERE / "compare_arms.py"), "--container", cname, "--arm", arm,
                  "--host-json", str(out / "host.json"), "--network-state", str(out / "network_state.json"),
-                 "--engine", "claude", "--max-calls", str(max_calls), "--max-cost-usd", str(max_cost),
+                 "--engine", engine, *(["--model", model] if model else []),
+                 *(["--judge-cves", sc["expected"], "--sample", str(sample), "--seed", str(seed)] if sample else []),
+                 "--max-calls", str(max_calls), "--max-cost-usd", str(max_cost),
                  "--run", str(run), "--out", str(res_dir)], timeout=3600)
-        (out / f"claude.{arm}.r{run}.log").write_text(cp.stderr, encoding="utf-8")
+        (out / f"{engine}.{arm}.r{run}.log").write_text(cp.stderr, encoding="utf-8")
         tail = [l for l in cp.stderr.splitlines() if "done in" in l]
         print(f"  [{name}] {arm}: {tail[-1].strip() if tail else 'no result: ' + cp.stderr.strip()[-200:]}", flush=True)
         rj = res_dir / "result.json"
@@ -201,6 +203,11 @@ def main() -> int:
     ap.add_argument("--analyze", choices=("now", "nvd", "osv"), default=None,
                     help="Model stage instead of the offline stage (needs the offline output).")
     ap.add_argument("--run", type=int, default=1)
+    ap.add_argument("--engine", choices=("claude", "agy"), default="claude", help="Model stage engine.")
+    ap.add_argument("--model", default="", help="Model id for the agy engine (default gemini-3.8-flash-medium).")
+    ap.add_argument("--sample", type=int, default=0,
+                    help="Model stage: judge the expected CVE plus this many seeded-random other candidates.")
+    ap.add_argument("--seed", type=int, default=20261104)
     ap.add_argument("--max-calls", type=int, default=60, help="per scenario")
     ap.add_argument("--max-cost-usd", type=float, default=1.5, help="per scenario")
     ap.add_argument("--max-total-usd", type=float, default=2.0,
@@ -217,7 +224,8 @@ def main() -> int:
             if spent >= a.max_total_usd:
                 print(f"  total cap ${a.max_total_usd:.2f} reached (spent ${spent:.2f}); skipping", flush=True)
                 continue
-            r = analyze_one(sc, a.vulhub, a.out / sc["name"], a.analyze, a.run, a.max_calls, a.max_cost_usd)
+            r = analyze_one(sc, a.vulhub, a.out / sc["name"], a.analyze, a.run, a.max_calls, a.max_cost_usd,
+                            a.engine, a.model, a.sample, a.seed)
             spent += (r or {}).get("cost_usd") or 0.0
             print(f"  running total ${spent:.3f}", flush=True)
         else:

@@ -38,7 +38,7 @@ FIELDS: tuple[Field, ...] = (
     Field("per_product", int, 15, "discovery", "At most this many candidates per product or library.", 1, 500),
     Field("max_per_source", int, 60, "discovery", "Safety cap on candidates from each discovery source.", 1, 5000),
     # --- the model stage ------------------------------------------------------------------
-    Field("engine", str, "claude", "model", "Verdict engine.", choices=("claude", "openai", "fake")),
+    Field("engine", str, "claude", "model", "Verdict engine.", choices=("claude", "openai", "agy", "fake")),
     Field("model", str, "", "model", "Model name for the openai-compatible engine (empty for claude)."),
     Field("base_url", str, "", "model", "Endpoint of the openai-compatible engine."),
     Field("max_calls", int, 60, "model", "Hard cap on model calls per run; 0 means no cap. Each candidate costs one call.", 0, 100000),
