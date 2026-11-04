@@ -1,8 +1,8 @@
 # Poster numbers
 
 Status of this file: consolidated 2026-11-03 from README.md (Results), PROJECT_STATE.md (v3-6b to v3-11) and the raw
-result files under `eval-lab/`. No new measurement. `results.png` is still drawn from the OLD table (section 3) and
-does not show section 1; redraw it before printing.
+result files under `eval-lab/`; held-out set 4 and Django/Airflow added 2026-11-05 (v3-13). `results.png` is still drawn from
+the OLD table (section 3) and does not show section 1; redraw it before printing.
 
 Two kinds of number appear below. Do not mix them on the poster.
 
@@ -19,18 +19,25 @@ Two kinds of number appear below. Do not mix them on the poster.
 | Held-out 1 | 10 evaluable of 12 | seen afterwards, no longer blind | 6 | 5 | 5 |
 | Held-out 2, first run | 10 | **blind**, code before v3-10 | 3 | 3 | 5 |
 | Held-out 3 | 10 | **blind**, current code | 3 | 2 | 2 |
-| **Pooled blind (set 2 first run + set 3)** | **20** | | **6** | **5** | **7** |
+| Held-out 4 | 10 | **blind**, current code, pre-registered 26171a9 | 4 | 2 | 5 |
+| **Pooled blind (set 2 first run + sets 3 and 4)** | **30** | | **10** | **7** | **12** |
+| Django + Airflow | 2 | never scored before; current code; listed separately, not pooled | 1 | 2 | 2 |
 
 - Held-out 2 after the v3-10 fixes: ours 7/10. Development data now (the gaps were fixed after seeing them). Do not print as blind.
 - Regression, 25 earlier runnable scenarios rerun on the v3-10 code: 21 hit before, 21 after, 0 lost, 0 gained.
 - Complementarity (expected CVE found by at least one tool):
-  held-out 2: Trivy + Grype 5/10, with ours 7/10; held-out 3: Trivy + Grype 2/10, with ours 4/10.
-  Found by us and by neither image scanner: flink, wordpress (set 2), druid (set 3).
+  held-out 2: Trivy + Grype 5/10, with ours 7/10 (as recorded at the time; not recomputed from files);
+  held-out 3: Trivy + Grype 2/10, with ours **3/10** (an earlier version of this file said 4/10; recomputed 2026-11-05 from
+  the raw candidate and baseline files, no arm adds a fourth); held-out 4: Trivy + Grype 5/10, with ours 6/10.
+  Found by us and by neither image scanner: flink, wordpress (set 2), druid (set 3), ghostscript (set 4).
 - Candidate recall on the development set by stage (KEV + banner -> + NVD -> + OSV): 5 -> 9 -> 12 of 15; 15/15 after the
   v3-7b catalog and whole-filesystem pass (tuned on).
 - Not scored: Django and Airflow (cannot start; CRLF in the Vulhub clone on Windows, not a tool result).
 
-Reading the pooled blind row: 6 / 5 / 7 of 20 is the same within noise. Say "complementary", not "better".
+Reading the pooled blind row: 10 / 7 / 12 of 30 (Wilson 95%: [0.19,0.51], [0.12,0.41], [0.25,0.58]) overlap completely.
+Grype is ahead of us by 2 on the point estimate; Trivy's hits are a subset of Grype's in all three sets. Say
+"complementary", not "better". Earlier pooled figure over sets 2 (first run) and 3 only: 6 / 5 / 7 of 20.
+Held-out 4 alone: ours 4/10 [0.17,0.69], Trivy 2/10 [0.06,0.51], Grype 5/10 [0.24,0.76].
 
 ## 2. Why the misses happen (checked after the runs, no code changed)
 
@@ -41,6 +48,19 @@ Reading the pooled blind row: 6 / 5 / 7 of 20 is the same within noise. Say "com
 | Network probe saw nothing | jimureport | none |
 | Data gap (library found, no CVE entry under it) | none | n/a (seen earlier: OFBiz, JBoss, Confluence, Spring Cloud Gateway) |
 | Lost to the per-product cap of 15 | none | joomla CVE-2015-8562 (CVSS 7.5 behind 63 higher scores) |
+
+Held-out 4 (checked after the run, no code changed):
+
+| Reason | Scenarios |
+|---|---|
+| Expected CVE is below the CVSS 7.0 floor of the OSV stage (found the library, dropped the advisory) | vite (CVE-2025-32395 is MODERATE; 16 advisories dropped) |
+| Scanner cannot name the product (no catalog row, no version file, built from source) | imagemagick 7.1.0-49, adminer, erlang/OTP, chartbrew (the app itself) |
+| Whole-image cap of 60 candidates | chartbrew (1457 libraries, 144 CVEs at CVSS >= 7.0, 60 kept) |
+| Scan could not run in the target | ingress-nginx (a K3s image: no glibc or musl loader, so neither scanner binary executes). Image scanners work from outside and are not affected. |
+
+Harness notes for sets 1 and 4 (not scanner code): Django and Airflow could not start only because the Vulhub clone is
+`autocrlf=true`; LF copies from `git archive` fix it (clone untouched). Airflow also needs its README's `airflow-init` run
+first, and the harness picked the one-shot init container; scenarios may now set `pre_run` and `service` (only Airflow does).
 
 Known unsupported: Alpine older than 3.12 (postgres 9.6.7, zabbix 3.0.3 stay uninventoried).
 
@@ -100,8 +120,8 @@ Go service listens on 10086). It is not "exploitable". No human review of the 76
 ## 7. Wording that the evidence supports
 
 Print: "tells you which matching CVEs are exploitable *on this host*"; "finds hand-installed and uberjar services that
-image scanners miss (flink, wordpress, druid); complementary to Trivy and Grype, not a replacement"; "blind set of 10
-new scenarios: 3 found vs 2 (Trivy) and 2 (Grype); pooled over two blind sets 6, 5 and 7 of 20".
+image scanners miss (flink, wordpress, druid); complementary to Trivy and Grype, not a replacement"; "two blind sets of 10
+new scenarios each: 3 and 4 found vs 2 and 2 (Trivy) and 2 and 5 (Grype); pooled over three blind sets 10, 7 and 12 of 30".
 
 Do not print: "more accurate", "fewer false positives", "complete assessment", "better than Trivy / Grype".
 

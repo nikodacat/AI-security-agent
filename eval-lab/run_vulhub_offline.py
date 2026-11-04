@@ -52,11 +52,16 @@ def compose_args(vdir: Path, proj: str, out: Path) -> list[str]:
     return ["docker", "compose", "-p", proj, "-f", str(base), "-f", str(over)]
 
 
-def pick_container(dc: list[str], vdir: Path, image: str | None = None) -> str:
+def pick_container(dc: list[str], vdir: Path, image: str | None = None, service: str | None = None) -> str:
     """The container under test. When the scenario names its `image` (a stack with several
     vulhub/ images, e.g. Kibana + Elasticsearch, where the CVE is in only one of them) take that
     one. Otherwise, among the running ones, prefer a vulhub/ image that exposes a port (a stack
     may also run a database, a cache, or an init job that has already exited)."""
+    if service:  # a stack whose containers share one image (Airflow): name the compose service
+        ids = sh(dc + ["ps", "-q", service], cwd=vdir).stdout.split()
+        if not ids:
+            raise RuntimeError(f"no running container for service {service}")
+        return ids[0]
     ids = sh(dc + ["ps", "-q"], cwd=vdir).stdout.split()   # `ps` lists running containers only
     if image:
         named = [c for c in ids if sh(["docker", "inspect", "-f", "{{.Config.Image}}", c]).stdout.strip() == image]
@@ -106,10 +111,12 @@ def run_one(sc: dict, vulhub: Path, out: Path, ports: str) -> dict:
 
     try:
         dc = compose_args(vdir, proj, out)
+        if sc.get("pre_run"):  # one-shot setup the scenario's README runs first (Airflow DB init)
+            sh(dc + ["run", "--rm", sc["pre_run"]], cwd=vdir, timeout=420)
         up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
         if not step("up", up.returncode == 0, up.stderr.strip()[-300:]):
             return rec
-        cid = pick_container(dc, vdir, sc.get("image"))
+        cid = pick_container(dc, vdir, sc.get("image"), sc.get("service"))
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         rec["container"] = cname
         alias = proj
@@ -178,11 +185,13 @@ def analyze_one(sc: dict, vulhub: Path, out: Path, arm: str, run: int,
             return None
     dc = compose_args(vdir, proj, out)
     try:
+        if sc.get("pre_run"):  # one-shot setup the scenario's README runs first (Airflow DB init)
+            sh(dc + ["run", "--rm", sc["pre_run"]], cwd=vdir, timeout=420)
         up = sh(dc + ["up", "-d"], cwd=vdir, timeout=420)
         if up.returncode != 0:
             print(f"  [{name}] up FAILED {up.stderr.strip()[-200:]}", flush=True)
             return None
-        cid = pick_container(dc, vdir, sc.get("image"))
+        cid = pick_container(dc, vdir, sc.get("image"), sc.get("service"))
         cname = sh(["docker", "inspect", "-f", "{{.Name}}", cid]).stdout.strip().lstrip("/")
         sh(["docker", "network", "connect", "--alias", proj, NETWORK, cid])
         print(f"  [{name}] ready: {wait_ready(cid, proj)}", flush=True)

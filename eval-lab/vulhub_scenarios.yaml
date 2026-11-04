@@ -38,7 +38,7 @@ scenarios:
   - {name: rocketmq-5-1-0,    dir: rocketmq/CVE-2023-37582, expected: CVE-2023-37582, heldout: true}
   - {name: ofbiz-17-12-01,    dir: ofbiz/CVE-2020-9496,     expected: CVE-2020-9496,  heldout: true}
   - {name: django-4-0-5,      dir: django/CVE-2022-34265,   expected: CVE-2022-34265, heldout: true}
-  - {name: airflow-1-10-10,   dir: airflow/CVE-2020-11978,  expected: CVE-2020-11978, heldout: true}
+  - {name: airflow-1-10-10,   dir: airflow/CVE-2020-11978,  expected: CVE-2020-11978, heldout: true, pre_run: airflow-init, service: airflow-webserver}
   - {name: mongo-express-0-53, dir: mongo-express/CVE-2019-10758, expected: CVE-2019-10758, heldout: true}
   - {name: couchdb-1-6-0,     dir: couchdb/CVE-2017-12636,  expected: CVE-2017-12636, heldout: true}
   - {name: jboss-as-6-1-0,    dir: jboss/CVE-2017-12149,    expected: CVE-2017-12149, heldout: true}
