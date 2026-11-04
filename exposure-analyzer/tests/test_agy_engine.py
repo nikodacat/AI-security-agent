@@ -40,6 +40,8 @@ class AgyEngine(unittest.TestCase):
         self.assertEqual(argv[argv.index("--model") + 1], "gemini-3.8-flash-high")
         self.assertEqual(argv[argv.index("--mode") + 1], "plan")
         self.assertNotIn("--dangerously-skip-permissions", argv)
+        self.assertNotIn("--new-project", argv)  # would leave an empty Antigravity project per call
+        self.assertEqual(argv[argv.index("--project") + 1], agent.AGY_PROJECT)
         prompt = argv[argv.index("-p") + 1]
         self.assertTrue(prompt.startswith("SYSTEM") and "USER" in prompt)
         self.assertNotEqual(seen["opts"]["cwd"], ".")  # a throwaway directory, not the repo

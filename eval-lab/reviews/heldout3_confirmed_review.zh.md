@@ -1,0 +1,51 @@
+# 人工審查表(中文版):20 筆 CONFIRMED 判決(共 76 筆中抽 20,seed 20261104)
+
+英文原表:`heldout3_confirmed_review.md`(同樣 20 列、同樣順序)。本表只是翻譯與白話,**沒有加入我的判斷**。
+
+## 要回答的問題
+
+> 這個漏洞,能不能透過這台主機「對外開放的服務」被打到?
+
+- `Y`:可以。攻擊者連到對外的埠,有合理機會碰到有漏洞的程式碼。
+- `N`:元件雖然裝在機器上,但對外服務沒用到它,或漏洞需要的條件這台主機沒有。
+- `?`:看完這張表還是無法判斷。**填 `?` 是正常且被接受的答案,不要硬猜。**
+
+## 幾個背景概念(不涉及任何一列的答案)
+
+1. **「裝了」不等於「被用到」。** 系統裡有 curl、openssl 這類套件,不代表對外的那個服務會呼叫它們。要看對外服務是用什麼語言、什麼元件做的。
+2. **漏洞通常有觸發條件。** 描述裡寫「當應用程式做 X 的時候」,就表示要有程式真的做 X 才會中。主機沒有做 X,就打不到。
+3. **DoS(阻斷服務)** 只是讓程式當機或變慢,不是被入侵,但仍算漏洞。
+4. **判斷依據只看本表的資訊。** 表裡沒寫的,不要憑印象補。
+
+## 表格
+
+「模型的理由」是 Claude/Gemini 當時寫的判斷依據(我縮短並翻成中文)。**模型的理由可能是錯的,這正是你要檢查的東西。**
+
+| # | 場景 | CVE | 元件 | 漏洞白話說明 | 模型判 CONFIRMED 的理由 | 答案 |
+|---|---|---|---|---|---|---|
+| 1 | druid-0-20-0 | CVE-2023-43642 | snappy-java 1.0.4.1(Java 壓縮函式庫) | 解壓縮資料時,如果資料宣告的區塊長度過大,程式沒有檢查上限,會發生無法恢復的錯誤而當機(DoS)。 | 這個 jar 放在 `/opt/druid/hadoop-dependencies/hadoop-client/2.8.5/` 底下;Apache Druid 的多個 Java 服務在跑,並對外開放 8081、8082 等埠。 | |
+| 2 | geoserver-2-17-2 | CVE-2023-24998 | commons-fileupload 1.3.3(處理檔案上傳的函式庫) | 1.5 之前的版本不限制一次上傳請求裡的「檔案部分」數量,攻擊者用惡意上傳就能造成 DoS。 | 這個 jar 在 GeoServer 網站程式的 `WEB-INF/lib` 裡,由 Jetty 在 8080 埠提供服務,外部可連到。 | |
+| 3 | gradio-4-12-0 | CVE-2026-104851 | fsspec 2025.3.2(Python 檔案系統介面函式庫) | fsspec 的 `ReferenceFileSystem` 讀取 Kerchunk 參考 JSON 文件時,會用不受限制的 jinja2 模板去渲染其中欄位(模板注入,可能執行程式)。 | fsspec 裝在 Python 3.9 裡,同一個 Python 正在 `0.0.0.0:7860` 跑 `python app.py`(Gradio),外部可連到。 | |
+| 4 | metabase-0-46-6 | CVE-2024-7254 | protobuf-java 3.17.3(Google 資料格式函式庫),在 BigQuery 驅動外掛 jar 內 | 解析「含大量巢狀 group」的不可信 protobuf 資料時,會因為超過堆疊上限而當掉(StackOverflow,DoS)。 | 該 jar 在 `/plugins/bigquery-cloud-sdk.metabase-driver.jar`;Metabase(Jetty 11.0.14)在 3000 埠跑,外部可連到。 | |
+| 5 | 1panel-1-10-10 | CVE-2023-23914 | curl 7.81.0(命令列下載工具/函式庫) | 連續請求多個網址時,curl 的 HSTS(強制使用 HTTPS 的機制)可能失效,導致明文傳輸。 | curl 是系統裡裝了的工具;主機有一個叫 1panel 的服務在 10086 埠,模型沒看到任何緩解設定。 | |
+| 6 | druid-0-20-0 | CVE-2025-46762 | parquet-avro 1.11.0(Parquet 檔案格式函式庫) | 解析 schema 時,預設的「信任套件」清單仍允許惡意類別被執行,可導致執行任意程式碼。 | 這個 jar 是 Druid 的 parquet 擴充套件(`/opt/druid/extensions/druid-parquet-extensions/`);多個 Druid Java 服務在監聽。 | |
+| 7 | gradio-4-12-0 | CVE-2026-112895 | pillow 10.4.0(Python 影像處理函式庫) | 對一份既有 PDF 做「附加(append)」操作時,解析 PDF 結構會耗盡資源(深層或重複的頁面參照)。 | Pillow 在 Python 3.9 裡;同一個 Python 在 7860 埠跑 Gradio,外部可連到。 | |
+| 8 | 1panel-1-10-10 | CVE-2022-42915 | curl 7.81.0 | 當 curl 被設定用 HTTP proxy 傳輸「非 HTTP(S)」網址時,可能發生 double free(記憶體錯誤)。 | curl 套件版本落在受影響範圍(7.77.0 到 7.86.0 之前);模型把函式庫視為「裝了就算在用」;主機有 10086 埠服務。 | |
+| 9 | 1panel-1-10-10 | CVE-2026-75803 | libssl3 3.0.2(OpenSSL 加密函式庫) | 對「空的密文」做 ChaCha20-Poly1305 或 AES-OCB 解密,且應用程式用 `EVP_Cipher()` 收尾時,可能沒驗證認證標籤就回報成功。需要程式真的這樣呼叫。 | libssl3 版本在受影響範圍;函式庫視為裝了就算在用;`/usr/local/bin/1panel` 在 10086 埠,外部可連到。 | |
+| 10 | jumpserver-3-6-3 | CVE-2026-34182 | libssl3 3.0.2 | 處理 CMS(加密訊息格式)的 AuthEnvelopedData 時,沒有充分檢查加密演算法與標籤長度,攻擊者可能取得等同金鑰的能力。需要程式在處理 CMS 資料。 | libssl3 版本在受影響範圍;函式庫視為裝了就算在用;nginx 在 80 埠,外部可連到。 | |
+| 11 | gradio-4-12-0 | CVE-2026-112394 | pillow 10.4.0 | Pillow 的 `P;2L` 與 `P;4L` 原始格式解碼器會讀超出輸入緩衝區末端(可餵特製的緩衝區與影像尺寸)。 | Pillow 裝在 Python 3.9;Gradio 網頁服務在 7860 埠,外部可連到。 | |
+| 12 | 1panel-1-10-10 | CVE-2023-4807 | libssl3 3.0.2 | POLY1305 驗證碼實作有 bug,**在 Windows 64 位元平台**、搭配支援 AVX512-IFMA 的較新 x86_64 處理器時,可能破壞程式內部狀態。 | libssl3 版本在受影響範圍;主機有 10086 埠服務(外部可連到),沒有緩解設定。 | |
+| 13 | jumpserver-3-6-3 | CVE-2026-18924 | curl 7.81.0 | libcurl 處理 HTTP/2 Server Push 時,若父 handle 設定與其他 handle 共用連線,清理階段會發生 use-after-free(釋放後使用)。 | curl 版本在受影響範圍;函式庫視為裝了就算在用;主機在 80 埠有 nginx 1.18.0,外部可連到。 | |
+| 14 | metabase-0-46-6 | CVE-2024-6119 | libssl3 3.1.1-r1(Alpine 系統的 OpenSSL) | 做憑證名稱檢查的應用(例如 TLS 用戶端驗證伺服器憑證)可能讀到無效記憶體位址而異常終止(DoS)。 | libssl3 版本在受影響範圍;函式庫視為裝了就算在用;Metabase(Jetty 11.0.14)在 3000 埠,外部可連到。 | |
+| 15 | jimureport-1-6-0 | CVE-2026-8927 | curl 7.81.0 | 重複使用同一個 libcurl handle 做連續傳輸、且 proxy 由環境變數設定時,第一個 proxy 的 Digest 認證狀態沒有清除,第二個 proxy 會錯用。 | curl 版本在受影響範圍;模型說函式庫是「看版本、不看程序是否在跑或連接埠是否可達」。(附註:這個場景的網路探測沒有偵測到對外服務。) | |
+| 16 | geoserver-2-17-2 | CVE-2024-47554 | commons-io 2.6(Java 常用工具函式庫) | `XmlStreamReader` 類別處理惡意構造的輸入時,會過度消耗 CPU(DoS)。 | 這個 jar 在 GeoServer 網站程式的 `WEB-INF/lib`;Jetty 在 8080 埠,外部可連到,沒有緩解設定。 | |
+| 17 | 1panel-1-10-10 | CVE-2026-8924 | curl 7.81.0 | curl 的 cookie 解析有缺陷,惡意 HTTP 伺服器可設定「超級 cookie」,繞過公共後綴清單檢查,讓 cookie 被送到不相關的第三方網域。 | curl 版本在受影響範圍;主機有 `/usr/local/bin/1panel` 在 10086 埠,沒有緩解設定。 | |
+| 18 | metabase-0-46-6 | CVE-2023-36478 | Jetty 11.0.14(Java 網頁伺服器) | HTTP/2 的 HPACK 標頭處理有整數溢位,標頭值可超過大小限制。 | Jetty 11.0.14 落在受影響範圍(11.0.0 到 11.0.15);3000 埠在監聽,外部探測確認可連到,橫幅就是 `Jetty 11.0.14`。 | |
+| 19 | elfinder-2-1-58 | CVE-2026-109619 | PHP 7.4.28 | PHP 某些全域狀態暫時指向「單一請求的記憶體」,在某些情況下沒被正確重置,下一個請求可能讀到已釋放的記憶體。 | PHP 7.4.28 在受影響範圍;Apache 載入了 `mod_php`,在 80 埠對外服務,外部可連到。 | |
+| 20 | druid-0-20-0 | CVE-2025-52999 | jackson-core 2.10.2(Java 的 JSON 處理函式庫) | 解析「巢狀很深」的資料時,可能丟出 StackOverflowError(DoS)。 | jar 在 `/opt/druid/lib/`;Druid 的 Java 程序載入這個目錄並在 2181、8081、8082、8083、8091、8888 埠監聽。 | |
+
+## 填寫方式
+
+- 在最後一欄填 `Y` / `N` / `?`,有想法可以順手寫一句原因。
+- 不確定就填 `?`。
+- 填完直接把整張表貼回來,或告訴我「填好了」,我會讀檔案。

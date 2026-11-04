@@ -461,6 +461,9 @@ def build_openai_compatible_verdict_fn(
 AGY_DEFAULT_PATH = "C:/Users/ideal/AppData/Local/agy/bin/agy.exe"
 # Windows caps a command line at 32k characters; agy takes the prompt as an argument.
 _AGY_MAX_PROMPT_CHARS = 28000
+# One shared project for every verdict call. `--new-project` left an empty project behind in
+# Antigravity per call (hundreds after an eval run); a named project is reused.
+AGY_PROJECT = "agy-verdict"
 
 
 def build_agy_verdict_fn(
@@ -493,7 +496,7 @@ def build_agy_verdict_fn(
         try:
             proc = await asyncio.create_subprocess_exec(
                 exe, "-p", prompt, "--model", model, "--mode", "plan",
-                "--output-format", "json", "--new-project",
+                "--output-format", "json", "--project", AGY_PROJECT,
                 cwd=workdir, stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             try:
