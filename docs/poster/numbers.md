@@ -1,8 +1,9 @@
 # Poster numbers
 
 Status of this file: consolidated 2026-11-03 from README.md (Results), PROJECT_STATE.md (v3-6b to v3-11) and the raw
-result files under `eval-lab/`; held-out set 4 and Django/Airflow added 2026-11-05 (v3-13). `results.png` is still drawn from
-the OLD table (section 3) and does not show section 1; redraw it before printing.
+result files under `eval-lab/`; held-out set 4 and Django/Airflow added 2026-11-05 (v3-13). `results.png` was redrawn 2026-11-05 by
+`make_results.py` (section 3 on the left, section 1 blind sets with Wilson intervals on the right); the numbers are
+typed into that script, so rerun it if section 1 changes. Django/Airflow are not on the chart.
 
 Two kinds of number appear below. Do not mix them on the poster.
 
@@ -120,7 +121,8 @@ Go service listens on 10086). It is not "exploitable". No human review of the 76
 
 ## 7. Wording that the evidence supports
 
-Print: "tells you which matching CVEs are exploitable *on this host*"; "finds hand-installed and uberjar services that
+Print: "tells you which matching CVEs are affected, present and reachable *on this host*, with a reason"
+(CONFIRMED is not "exploitable"; nothing is exploited); "finds hand-installed and uberjar services that
 image scanners miss (flink, wordpress, druid); complementary to Trivy and Grype, not a replacement"; "two blind sets of 10
 new scenarios each: 3 and 4 found vs 2 and 2 (Trivy) and 2 and 5 (Grype); pooled over three blind sets 10, 7 and 12 of 30".
 

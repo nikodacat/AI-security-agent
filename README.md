@@ -1,14 +1,15 @@
 # AI Security Agent
 
 A gray-box vulnerability assessment tool that answers the question scanners
-leave open: **of the CVEs that match this machine's software, which ones can
-actually be exploited here?**
+leave open: **of the CVEs that match this machine's software, which ones are
+actually present, reachable and not mitigated here?**
 
 Scanners list every CVE whose version range matches. This tool then asks an AI
 reasoning layer to check each one against measured facts about the host
 (config, loaded modules, listening sockets) and what an outside attacker can
-reach, and returns one of five verdicts with its reasoning. It never
-exploits anything.
+reach, and returns one of five verdicts with its reasoning. `CONFIRMED` means
+"affected version present, and a service that could expose it is reachable",
+not "proven exploitable". It never exploits anything.
 
 Undergraduate 畢業專題 (Taiwan). Design rationale: `docs/DESIGN.md`. QA record:
 `docs/VERIFICATION.md`. Status and open work: `PROJECT_STATE.md`.
@@ -198,6 +199,19 @@ engine; week-9 and "banners" rows are the mean of 2 runs, the NVD row is 1 run.
   log in `eval-lab/ground_truth.md`.
 - Sample is small (3 containers, 1-2 runs, key written by the author). Treat
   it as a regression signal.
+
+### Blind Vulhub sets, compared with Trivy and Grype
+
+Later sets of Vulhub scenarios were drawn by a script with a fixed seed and
+committed before any run, then run once with unchanged scanner code. Scored on
+whether the expected CVE appears in each tool's list (a recall measure, not a
+verdict). Over 30 such scenarios (held-out 2 first run, 3 and 4): this tool 10,
+Trivy 7, Grype 12. The 95% intervals overlap, so read it as **complementary**,
+not better: the tool finds hand-installed and uberjar services (Flink,
+WordPress, Druid, Ghostscript) that image scanners miss, and Grype lists more
+of the rest. Misses and their causes are in `docs/poster/numbers.md`, which
+also lists what has not been measured (precision in particular). The chart is
+`docs/poster/results.png`; `docs/poster/make_results.py` redraws it.
 
 ### Answer key we did not write: Vulhub
 
