@@ -68,12 +68,14 @@ def main() -> None:
              "For each row answer: **is the vulnerable code reachable through the service that is exposed on this host?**",
              "`Y` = yes, an attacker reaching the exposed port could plausibly hit it; `N` = the component is there but nothing",
              "network-facing uses it (or the CVE needs something the host does not have); `?` = cannot tell from this sheet.",
-             "Write the answer in the last column.", "",
-             "| # | Scenario | CVE | Component (source) | What the CVE is | Model's reason | Answer |", "|---|---|---|---|---|---|---|"]
+             "Column A is answerable from this sheet alone: does the model's reason state a link between the vulnerable component",
+             "and the exposed service (e.g. 'loaded by the running process'), or only that it is installed and a port is open?",
+             "Write `yes` / `no` in A. Column B is the question above; `?` is expected for most rows.", "",
+             "| # | Scenario | CVE | Component (source) | What the CVE is | Model's reason | A: reason links component to service? | B: Answer |", "|---|---|---|---|---|---|---|---|"]
     for i, r in enumerate(pick, 1):
         desc, how = describe(r["cve"], idx)
         cell = lambda s, n: " ".join(s.split())[:n].replace("|", "/")
-        lines.append(f"| {i} | {r['sc']} | {r['cve']} | {cell(r['pkg'], 80)} ({r['src']}) | {cell(desc, 320)} | {cell(r['reason'], 300)} |  |")
+        lines.append(f"| {i} | {r['sc']} | {r['cve']} | {cell(r['pkg'], 80)} ({r['src']}) | {cell(desc, 320)} | {cell(r['reason'], 300)} |  |  |")
     a.out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote {a.out} ({len(pick)} rows)")
 
