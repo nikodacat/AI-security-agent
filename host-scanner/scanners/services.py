@@ -79,7 +79,8 @@ def parse_proc_net_tcp(text: str, family: str) -> list[dict]:
 
 
 def is_loopback(bind: str) -> bool:
-    return bind.startswith("127.") or bind == "::1"
+    # "::ffff:127.0.0.1" is an IPv4 loopback address seen through an IPv6 socket
+    return bind.startswith("127.") or bind == "::1" or bind.lower().startswith("::ffff:127.")
 
 
 def parse_loaded_modules(files: dict[str, str]) -> list[str]:

@@ -188,7 +188,7 @@ entries, and make one Claude call per verdict:
 - **attack-simulator** — outputs a text attack-path narrative (recon →
   discovery → exploitation), placed into the HTML report as its own section.
   No suggested attacker-tool invocations (no `nmap -sV`, no `sqlmap -u`);
-  advisor-fidelity only.
+  advisory only.
 - **fix-publisher** — outputs an apt-install block + config diff + service
   restart directive per CONFIRMED. Written into both an HTML section and a
   standalone `remediation.md` file that ops can hand off independently.
@@ -301,7 +301,7 @@ accepted at final confirmation.
 
 ### Branch: Bridge design
 
-- [ASKED] Verifier path: A first (advisor + human-in-loop), evolve toward B (autonomous with allow-list) if time
+- [ASKED] Verifier path: A first (advisory + human-in-loop), evolve toward B (autonomous with allow-list) if time
 - [ASKED] Module location: standalone sibling + top-level `run_full_scan.sh` wrapper
 - [ASKED] Renames before build:
   - `home-security-ai/` → **`host-scanner/`**
@@ -340,7 +340,6 @@ accepted at final confirmation.
 - [ASKED] Report length: 15-25 pages (target ~20), not 40-60
 - [ASKED] Chapter structure: 緒論 / 相關研究 / 系統設計 / 實作 / 評估 / 討論與未來工作 / 結論
 - [ASKED] Demo: 5-minute interactive live run in the 3-container Docker lab
-- [AUTO] Advisor cadence: bi-weekly demo of latest chunk
 - [AUTO] Peer testing: one friend runs `docker compose up && ./run_full_scan.sh` 1 week before defense
 - [AUTO] Backup plan: pre-recorded 3-minute demo video 3 days before defense
 - [AUTO] Repo visibility: private through defense day

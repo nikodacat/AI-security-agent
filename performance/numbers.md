@@ -100,6 +100,16 @@ Model stage on OSV candidates (3 scenarios): expected CVE CONFIRMED in nginx, Ac
 CONFIRMED here means "affected version present on a host with a reachable service" (e.g. curl 7.81 on a host whose
 Go service listens on 10086). It is not "exploitable". No human review of the 76 has been done; do not print a precision.
 
+### 4c. Are the CONFIRMED reasons grounded in the inputs? (`eval-lab/check_evidence.py`, held-out 3, no human)
+
+| Claim | Number | Caveat |
+|---|---|---|
+| Quoted ports / external reachability / bind addresses / installed versions that do not exist in the inputs | 0 of 212 reasons (Argon r3 79, Argon r5 78, Claude 55) had a mismatch, except 1 flagged claim | the 1 flag is an advisory fix version ("upstream 2.4.54"), read by hand |
+| Claims checked | ports 125/129/67, external 125/128/66, bind 43/49/26, versions 132/137/84 (Argon r3 / Argon r5 / Claude) | regex extraction; first version had 26 false flags (CVSS scores, advisory ranges), fixed once and the numbers are from the fixed version |
+
+This says the model does not invent ports, versions or probe results. It does NOT say the verdict is correct, and it cannot
+check inferences such as "this library is used by the exposed service" (the weak point of the 20-reason human check).
+
 ## 5. Cost and effort
 
 | Item | Number | Caveat |

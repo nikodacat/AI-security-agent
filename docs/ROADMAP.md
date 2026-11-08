@@ -151,8 +151,7 @@ Per-chunk decision rationale is summarised in `docs/DESIGN.md` and `docs/VERIFIC
 - [ ] **K. Report chapters 1-3 draft.**
   Depends on: (design finalized — already true).
   Can overlap with J.
-  Outcome: 緒論 / 相關研究 / 系統設計 drafted at target page count. Bi-weekly
-  advisor review.
+  Outcome: 緒論 / 相關研究 / 系統設計 drafted at target page count.
 
 - [ ] **L. Report chapters 4-5 draft.**
   Depends on: J (needs the eval data for chapter 5).
@@ -208,5 +207,5 @@ Code + eval + verification chunks (A/B/C/D/E/F/G/H/I/J/P/V) all done as of
 mistakes stay contained to one chapter's worth of prose.
 
 Each remaining chunk is still small enough for a single `/build-verify-loop`
-cycle. For writing chunks (K/L/M), the loop shape is: draft → advisor
-review → revise, per chapter.
+cycle. For writing chunks (K/L/M), the loop shape is: draft → review
+→ revise, per chapter.

@@ -362,6 +362,24 @@ CVEs for products it knows, and it says nothing about the rest. Notes:
   signal, not an independent benchmark.
 - Linux targets only. Debian/Ubuntu is the tested family.
 
+## Planned work
+
+- **Attack verification (the main next step).** `attack-simulator` today only *proposes*: it writes prose
+  about how a confirmed weakness could be abused. The plan is to split the attack side into two modes:
+  1. **Explain** (what exists now): a narrative for the defender, no execution.
+  2. **Verify**: for CONFIRMED verdicts on a target the operator owns or is authorized to test, run an
+     allow-listed, non-destructive check that shows the weakness is actually exploitable, and feed the
+     result back into the verdict ("verified" / "not reproduced"). This needs an explicit opt-in, a
+     target-scope check, a sandboxed runner and human approval; it is the "path B" left open in
+     `docs/DESIGN.md`.
+- **Product detection from a config file**, so a user can add a software's version-check command without
+  editing code (today the table is in `host-scanner/scanners/catalog.py`).
+- **More security checks** beyond the ones in `host-scanner/scanners/posture.py` and `leaks.py` (for
+  example a CIS benchmark mapping), and checking the fix hints on more distributions.
+- **Fetch the scan file over SSH** and compare scans over time.
+- **Measure precision.** The patched-version and not-exposed controls in `eval-lab/run_controls.py` are a
+  start; a human-checked sample of CONFIRMED verdicts is still missing.
+
 ## Responsible use
 
 This tool assesses systems you own or are authorized to test. It does not

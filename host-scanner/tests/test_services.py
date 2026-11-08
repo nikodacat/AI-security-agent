@@ -37,6 +37,8 @@ class TestProcNet(unittest.TestCase):
     def test_loopback(self):
         self.assertTrue(sv.is_loopback("127.0.0.1"))
         self.assertTrue(sv.is_loopback("::1"))
+        self.assertTrue(sv.is_loopback("::ffff:127.0.0.1"))  # IPv4 loopback seen through an IPv6 socket
+        self.assertFalse(sv.is_loopback("::ffff:10.0.0.5"))
         self.assertFalse(sv.is_loopback("0.0.0.0"))
 
 
