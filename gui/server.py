@@ -27,6 +27,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -45,6 +46,11 @@ _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 DEFAULT_MAX_CALLS = 60       # run_full_scan.py defaults, shown in the form
 DEFAULT_MAX_COST_USD = 2.0
 LOCAL = "__local__"
+SERVER = "__server__"
+UPLOADS = RESULTS / "_uploads"
+MAX_UPLOAD = 30_000_000
+_HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$")   # hostname or IPv4/IPv6
+_ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 
 
 # --------------------------------------------------------------------------- #
@@ -52,7 +58,8 @@ LOCAL = "__local__"
 # --------------------------------------------------------------------------- #
 
 def build_command(spec: dict, containers: list[str], *, out_dir: Path,
-                  platform: str = sys.platform, python: str = sys.executable) -> list[str]:
+                  platform: str = sys.platform, python: str = sys.executable,
+                  uploads_dir: Path = UPLOADS) -> list[str]:
     """Turn a form submission into an argument list, or raise ValueError."""
     engine = spec.get("engine")
     if engine not in ("fake", "claude"):
@@ -68,6 +75,9 @@ def build_command(spec: dict, containers: list[str], *, out_dir: Path,
         if flag("check_versions"):
             cmd.append("--check-versions")
         return cmd
+
+    if target == SERVER:
+        return _server_command(spec, containers, out_dir, python, uploads_dir)
 
     if not isinstance(target, str) or not _NAME_RE.match(target) or target not in containers:
         raise ValueError("target must be a running container")
@@ -99,8 +109,80 @@ def build_command(spec: dict, containers: list[str], *, out_dir: Path,
     return cmd
 
 
-def run_dir_name(target: str, now: float | None = None) -> str:
-    label = "this-machine" if target == LOCAL else target
+def have_nmap() -> bool:
+    return shutil.which("nmap") is not None
+
+
+def _server_command(spec: dict, containers: list[str], out_dir: Path, python: str,
+                    uploads_dir: Path) -> list[str]:
+    """An ordinary server, judged from a host-scan file taken on that server."""
+    host = spec.get("host")
+    if not isinstance(host, str) or not _HOST_RE.match(host):
+        raise ValueError("enter the server's IP address or host name")
+    scan_id = spec.get("scan_id")
+    scan_file = uploads_dir / f"{scan_id}.json" if isinstance(scan_id, str) and _ID_RE.match(scan_id) else None
+    if scan_file is None or not scan_file.is_file():
+        raise ValueError("choose the scan file taken on the server")
+    flag = lambda k: bool(spec.get(k))  # noqa: E731
+    probe = flag("probe")
+    if probe:
+        if not flag("authorized"):
+            raise ValueError("confirm that you own this server or are authorized to assess it "
+                             "(the network check connects to it)")
+        if not have_nmap() and "eval-attacker" not in containers:
+            raise ValueError("the network check needs nmap on this computer (install it from "
+                             "https://nmap.org), or untick the network check")
+    if flag("banner") and not probe:
+        raise ValueError("software seen on the network needs the network check")
+    try:
+        max_calls = int(spec.get("max_calls", DEFAULT_MAX_CALLS))
+        max_cost = float(spec.get("max_cost_usd", DEFAULT_MAX_COST_USD))
+    except (TypeError, ValueError):
+        raise ValueError("limits must be numbers") from None
+    if not 0 <= max_calls <= 500 or not 0 <= max_cost <= 50:
+        raise ValueError("limits out of range (calls 0-500, cost 0-50 USD)")
+
+    engine = spec["engine"]
+    cmd = [python, str(REPO / "eval-lab" / "run_full_scan.py"), "--scan-json", str(scan_file),
+           "--label", host, "--engine", engine, "--out-dir", str(out_dir),
+           "--attack-simulator", "--fix-publisher", "--report", str(out_dir / "report.html")]
+    if probe:
+        cmd += ["--prober-target", host]
+    if flag("banner"):
+        cmd.append("--banner-candidates")
+    if flag("osv"):
+        cmd.append("--osv-discovery")
+    if flag("nvd"):
+        cmd.append("--nvd-discovery")
+    if flag("check_versions"):
+        cmd.append("--check-versions")
+    if engine == "claude":
+        cmd += ["--max-calls", str(max_calls), "--max-cost-usd", str(max_cost)]
+    return cmd
+
+
+def save_upload(data: bytes, uploads_dir: Path = UPLOADS) -> str:
+    """Store an uploaded host-scan file and return its id; ValueError if it is not one."""
+    if not data or len(data) > MAX_UPLOAD:
+        raise ValueError("the file is empty or larger than 30 MB")
+    try:
+        scan = json.loads(data.decode("utf-8-sig"))
+    except (UnicodeDecodeError, ValueError):
+        raise ValueError("that file is not JSON") from None
+    if not isinstance(scan, dict) or not isinstance(scan.get("scanners"), dict):
+        raise ValueError("that file is not a host scan (it has no 'scanners' section); use the file "
+                         "that sec-agent-target writes on the server")
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    scan_id = secrets.token_urlsafe(18)
+    (uploads_dir / f"{scan_id}.json").write_text(json.dumps(scan), encoding="utf-8")
+    return scan_id
+
+
+def run_dir_name(target: str, now: float | None = None, host: str = "") -> str:
+    if target == SERVER:
+        label = host if _HOST_RE.match(host or "") else "server"
+    else:
+        label = "this-machine" if target == LOCAL else target
     return f"{label}-{time.strftime('%Y%m%d_%H%M%S', time.localtime(now))}"
 
 
@@ -226,7 +308,9 @@ class Jobs:
 # HTTP
 # --------------------------------------------------------------------------- #
 
-def make_handler(token: str, port: int, roots: tuple[Path, ...], jobs: Jobs, results_dir: Path):
+def make_handler(token: str, port: int, roots: tuple[Path, ...], jobs: Jobs, results_dir: Path,
+                 uploads_dir: Path | None = None):
+    uploads_dir = uploads_dir or results_dir / "_uploads"
     page = (HERE / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", token).encode("utf-8")
     local_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
 
@@ -261,6 +345,7 @@ def make_handler(token: str, port: int, roots: tuple[Path, ...], jobs: Jobs, res
                 containers, problem = list_containers()
                 self._json(200, {"containers": containers, "docker_problem": problem,
                                  "can_scan_local": sys.platform.startswith("linux"),
+                                 "have_nmap": have_nmap(),
                                  "defaults": {"max_calls": DEFAULT_MAX_CALLS, "max_cost_usd": DEFAULT_MAX_COST_USD}})
             elif path == "/api/runs":
                 self._json(200, list_runs(*roots))
@@ -300,6 +385,15 @@ def make_handler(token: str, port: int, roots: tuple[Path, ...], jobs: Jobs, res
             if not secrets.compare_digest(self.headers.get("X-Token", ""), token):
                 return self._json(403, {"error": "missing or wrong token; reload the page"})
             path = urlparse(self.path).path
+            if path == "/api/upload":
+                try:
+                    length = int(self.headers.get("Content-Length", 0))
+                    if length > MAX_UPLOAD:
+                        raise ValueError("the file is larger than 30 MB")
+                    scan_id = save_upload(self.rfile.read(length), uploads_dir)
+                except ValueError as e:
+                    return self._json(400, {"error": str(e)})
+                return self._json(200, {"scan_id": scan_id})
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(min(length, 10_000)) or b"{}")
@@ -311,9 +405,9 @@ def make_handler(token: str, port: int, roots: tuple[Path, ...], jobs: Jobs, res
             if path == "/api/run":
                 containers, _ = list_containers()
                 try:
-                    run_name = run_dir_name(str(body.get("target")))
+                    run_name = run_dir_name(str(body.get("target")), host=str(body.get("host") or ""))
                     out_dir = results_dir / run_name
-                    cmd = build_command(body, containers, out_dir=out_dir)
+                    cmd = build_command(body, containers, out_dir=out_dir, uploads_dir=uploads_dir)
                     jobs.start(cmd, out_dir, f"{results_dir.name}/{run_name}")
                 except ValueError as e:
                     return self._json(400, {"error": str(e)})

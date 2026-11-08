@@ -52,6 +52,9 @@
   a { color: var(--accent); }
   .note { color: var(--muted); font-size: 13px; }
   .hidden { display: none; }
+  input[type=text] { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+                     padding: 7px 10px; font: inherit; width: 100%; max-width: 360px; }
+  code { background: var(--code); border-radius: 4px; padding: 1px 5px; font: 13px Consolas, monospace; }
 </style>
 </head>
 <body>
@@ -66,6 +69,15 @@
       <label for="target">Target</label>
       <select id="target"></select>
 
+      <label class="srv hidden" for="host">Server address</label>
+      <input type="text" id="host" class="srv hidden" placeholder="IP or host name, e.g. 203.0.113.5" autocomplete="off">
+
+      <label class="srv hidden" for="scanfile">Scan file</label>
+      <div class="srv hidden">
+        <input type="file" id="scanfile" accept=".json,application/json">
+        <div class="note">The file made on the server: run <code>./sec-agent-target &gt; host.json</code> there, then pick host.json here. Nothing is run on the server from this page.</div>
+      </div>
+
       <label for="engine">AI engine</label>
       <select id="engine">
         <option value="fake">fake: no AI, quick pipeline check</option>
@@ -78,6 +90,8 @@
         <label><input type="checkbox" id="banner" checked> Also check software seen on the network <small>(from service banners)</small></label>
         <label><input type="checkbox" id="osv"> Also check libraries <small>(OSV, more AI calls)</small></label>
         <label><input type="checkbox" id="nvd"> Also check beyond CISA KEV <small>(NVD, more AI calls)</small></label>
+        <label class="srv hidden"><input type="checkbox" id="probe"> Also check the server from the network <small id="nmapnote">(connects to it with nmap from this computer)</small></label>
+        <label class="srv hidden"><input type="checkbox" id="authorized"> I own this server or am authorized to assess it</label>
         <label><input type="checkbox" id="check_versions"> Check versions against NVD <small>(slower)</small></label>
       </div>
 
@@ -121,8 +135,11 @@ async function api(path, body) {
 
 function updateForm() {
   const isLocal = $("target").value === "__local__";
+  const isServer = $("target").value === "__server__";
   const ai = $("engine").value === "claude";
-  for (const id of ["v2", "banner", "osv", "nvd"]) { $(id).closest("label").classList.toggle("hidden", isLocal); }
+  for (const e of document.querySelectorAll(".srv")) e.classList.toggle("hidden", !isServer);
+  $("v2").closest("label").classList.toggle("hidden", isLocal || isServer);
+  for (const id of ["banner", "osv", "nvd"]) { $(id).closest("label").classList.toggle("hidden", isLocal); }
   $("limits").classList.toggle("hidden", isLocal || !ai);
   $("limits-l").classList.toggle("hidden", isLocal || !ai);
   const w = $("aiwarn");
@@ -130,8 +147,10 @@ function updateForm() {
   w.textContent = isLocal
     ? "This sends findings to the AI and uses your Claude quota. This option has no call limit setting."
     : "This sends findings to the AI and uses your Claude quota: up to " + $("max_calls").value + " calls / " + $("max_cost").value + " USD.";
-  $("banner").disabled = !$("v2").checked;
-  if (!$("v2").checked) $("banner").checked = false;
+  // software seen on the network needs the full pipeline (containers) or the network check (servers)
+  const needsNet = isServer ? !$("probe").checked : !$("v2").checked;
+  $("banner").disabled = needsNet;
+  if (needsNet) $("banner").checked = false;
 }
 
 async function loadSetup() {
@@ -140,12 +159,23 @@ async function loadSetup() {
     const sel = $("target");
     sel.replaceChildren();
     for (const c of setup.containers) { const o = el("option", null, "Docker container: " + c); o.value = c; sel.append(o); }
+    { const o = el("option", null, "A server: IP + scan file"); o.value = "__server__"; sel.append(o); }
     if (setup.can_scan_local) { const o = el("option", null, "This computer"); o.value = "__local__"; sel.append(o); }
+    if (!setup.have_nmap) $("nmapnote").textContent = "(connects to it with nmap; nmap is not installed on this computer, install it from nmap.org first)";
     $("max_calls").value = setup.defaults.max_calls;
     $("max_cost").value = setup.defaults.max_cost_usd;
-    if (!sel.options.length) { $("go").disabled = true; $("msg").textContent = (setup.docker_problem || "No running containers") + ". Start a target, then reload this page."; }
+    if (setup.docker_problem) $("msg").textContent = setup.docker_problem + ": container targets and the network check are unavailable.";
     updateForm();
   } catch (e) { $("msg").textContent = "Could not load setup: " + e.message; }
+}
+
+async function uploadScan() {
+  const f = $("scanfile").files[0];
+  if (!f) throw new Error("Choose the scan file taken on the server.");
+  const r = await fetch("/api/upload", { method: "POST", headers: { "X-Token": TOKEN }, body: f });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data.scan_id;
 }
 
 async function go() {
@@ -154,6 +184,13 @@ async function go() {
                  osv: $("osv").checked, nvd: $("nvd").checked, check_versions: $("check_versions").checked,
                  max_calls: Number($("max_calls").value), max_cost_usd: Number($("max_cost").value) };
   try {
+    if (body.target === "__server__") {
+      body.host = $("host").value.trim();
+      body.probe = $("probe").checked;
+      body.authorized = $("authorized").checked;
+      body.v2 = false;
+      body.scan_id = await uploadScan();
+    }
     const r = await api("/api/run", body);
     currentRun = r.run_id; offset = 0;
     $("log").textContent = ""; $("log").classList.remove("hidden"); $("after").classList.add("hidden");
@@ -210,7 +247,7 @@ async function loadPast() {
   } catch (e) { box.textContent = "Could not load runs: " + e.message; }
 }
 
-for (const id of ["target", "engine", "v2", "max_calls", "max_cost"]) $(id).addEventListener("change", updateForm);
+for (const id of ["target", "engine", "v2", "probe", "max_calls", "max_cost"]) $(id).addEventListener("change", updateForm);
 $("go").onclick = go;
 $("stop").onclick = async () => { try { await api("/api/stop", {}); } catch (e) { $("msg").textContent = e.message; } };
 loadSetup().then(() => { loadPast(); poll(); });

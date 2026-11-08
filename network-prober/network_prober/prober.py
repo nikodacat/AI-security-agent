@@ -75,9 +75,9 @@ def scan_targets(
             import nmap  # type: ignore[import-not-found]
         except ImportError as e:  # pragma: no cover — exercised in the container
             raise ProberDependencyError(
-                "python-nmap not installed. On the coordinator: "
-                "`pip install python-nmap`. Locally: run inside "
-                "the eval-attacker container."
+                "python-nmap not installed. Run `pip install python-nmap` and install "
+                "nmap itself (https://nmap.org). Or run inside the eval-attacker "
+                "container, which has both."
             ) from e
         scanner_factory = nmap.PortScanner
         scanner_error = nmap.PortScannerError  # type: ignore[attr-defined]
