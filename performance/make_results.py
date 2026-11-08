@@ -1,4 +1,4 @@
-"""Redraw docs/poster/results.png from the numbers in numbers.md (sections 3 and 1). Run: python docs/poster/make_results.py"""
+"""Redraw performance/results.png from the numbers in numbers.md (sections 3 and 1). Run: python performance/make_results.py"""
 from math import sqrt
 import matplotlib
 matplotlib.use("Agg")
@@ -58,4 +58,4 @@ for ax in (a, b):
 fig.text(0.01, 0.01, "Candidate recall, not a verdict: 'the tool listed it'. Intervals overlap: complementary, not better. "
          "Left: Claude engine, rows 1-2 mean of 2 runs, NVD row 1 run; small sample.", fontsize=10, color="#52606d")
 fig.tight_layout(rect=(0, 0.04, 1, 1))
-fig.savefig("docs/poster/results.png", dpi=150)
+fig.savefig("performance/results.png", dpi=150)

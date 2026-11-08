@@ -273,9 +273,9 @@ verdict). Over 30 such scenarios (held-out 2 first run, 3 and 4): this tool 10,
 Trivy 7, Grype 12. The 95% intervals overlap, so read it as **complementary**,
 not better: the tool finds hand-installed and uberjar services (Flink,
 WordPress, Druid, Ghostscript) that image scanners miss, and Grype lists more
-of the rest. Misses and their causes are in `docs/poster/numbers.md`, which
+of the rest. Misses and their causes are in `performance/numbers.md`, which
 also lists what has not been measured (precision in particular). The chart is
-`docs/poster/results.png`; `docs/poster/make_results.py` redraws it.
+`performance/results.png`; `performance/make_results.py` redraws it.
 
 ### Answer key we did not write: Vulhub
 
