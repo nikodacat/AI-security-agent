@@ -36,6 +36,7 @@ _VERDICT_BADGE_CLASS = {
 _SECTION_MARKER = "<!-- exposure-analyzer:verdicts -->"
 _ATTACK_MARKER = "<!-- exposure-analyzer:attack-narratives -->"
 _REMEDIATION_MARKER = "<!-- exposure-analyzer:remediations -->"
+_SECURITY_CHECKS_MARKER = "<!-- exposure-analyzer:security-checks -->"
 
 # Sibling package roots (siblings of exposure-analyzer/ under the repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # exposure_analyzer/ → exposure-analyzer/ → repo/
@@ -49,12 +50,16 @@ def append_verdicts_to_report(
     *,
     attack_narratives_path: Path | None = None,
     remediations_path: Path | None = None,
+    scan: dict | None = None,
 ) -> None:
     """Insert (or replace) analyzer + optional attack + remediation sections.
 
     Reads the report file, strips any previously-inserted verdicts /
     attack / remediation blocks (each with its own marker), inserts fresh
     ones before the closing `</body>` tag, and writes the file back.
+
+    `scan` (the host scan JSON) adds a "Security checks" section: the posture and leak
+    findings with a fixed fix hint each (no AI involved).
 
     `attack_narratives_path` / `remediations_path` are optional. When
     provided, this function lazily imports the sibling packages
@@ -75,6 +80,7 @@ def append_verdicts_to_report(
 
     attack_section = _load_attack_section(attack_narratives_path)
     remediation_section = _load_remediation_section(remediations_path)
+    checks_section = _load_security_checks_section(scan)
 
     original = path.read_text(encoding="utf-8")
     stripped = _strip_all_sections(original)
@@ -85,6 +91,8 @@ def append_verdicts_to_report(
         insert += "\n" + attack_section
     if remediation_section:
         insert += "\n" + remediation_section
+    if checks_section:
+        insert += "\n" + checks_section
 
     if "</body>" in stripped:
         updated = stripped.replace("</body>", insert + "\n</body>", 1)
@@ -140,6 +148,21 @@ def _load_remediation_section(path: Path | None) -> str:
     return render_html_section(rems, generated_at=generated_at)
 
 
+def _load_security_checks_section(scan: dict | None) -> str:
+    """Render the posture + leak findings of `scan` as HTML. Empty if no scan given."""
+    if scan is None:
+        return ""
+    _ensure_sibling_on_path(_FIX_PUBLISHER_ROOT)
+    try:
+        from fix_publisher.hardening import collect_findings, render_html_section  # type: ignore
+    except ImportError as e:  # pragma: no cover -- lazy import path
+        raise RuntimeError(
+            f"scan given but fix-publisher package not importable. "
+            f"Expected at {_FIX_PUBLISHER_ROOT}. Original error: {e}"
+        ) from e
+    return render_html_section(collect_findings(scan))
+
+
 def _peek_generated_at(path: Path) -> str:
     """Best-effort extraction of `generated_at` from a sibling JSON payload."""
     try:
@@ -172,7 +195,7 @@ def _strip_all_sections(doc: str) -> str:
     Applied in that order so each strip pass sees a stable document. All
     three markers use the same "start / start + ' end'" convention.
     """
-    for marker in (_SECTION_MARKER, _ATTACK_MARKER, _REMEDIATION_MARKER):
+    for marker in (_SECTION_MARKER, _ATTACK_MARKER, _REMEDIATION_MARKER, _SECURITY_CHECKS_MARKER):
         doc = _strip_marked_block(doc, marker)
     return doc
 
@@ -185,7 +208,10 @@ def _strip_marked_block(doc: str, marker: str) -> str:
     end = doc.find(end_marker, start)
     if end == -1:
         return doc
-    return doc[:start] + doc[end + len(end_marker):]
+    tail = doc[end + len(end_marker):]
+    if tail.startswith("\n"):  # the newline the insert added after the block
+        tail = tail[1:]
+    return doc[:start] + tail
 
 
 def _render_verdicts_section(verdicts: list[Verdict]) -> str:

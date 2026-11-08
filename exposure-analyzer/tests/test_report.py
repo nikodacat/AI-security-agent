@@ -394,5 +394,37 @@ class TestSiblingSectionInjection(unittest.TestCase):
             self.assertIn("<!-- exposure-analyzer:verdicts -->", html)
 
 
+class TestSecurityChecksSection(unittest.TestCase):
+    SCAN = {"scanners": {
+        "posture": {"findings": [{"id": "ssh-root-login", "severity": "high", "title": "Root login over SSH", "evidence": "PermitRootLogin yes"}]},
+        "leaks": {"findings": [{"id": "leak-dotenv", "severity": "high", "title": ".env file", "evidence": "/var/www/.env (40 bytes)"}]},
+    }}
+
+    def _run(self, **kw):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "r.html"
+            p.write_text(_MINIMAL_REPORT_HTML, encoding="utf-8")
+            append_verdicts_to_report(_sample_verdicts(), p, **kw)
+            first = p.read_text(encoding="utf-8")
+            append_verdicts_to_report(_sample_verdicts(), p, **kw)
+            return first, p.read_text(encoding="utf-8")
+
+    def test_section_lists_findings_with_hints_and_is_idempotent(self):
+        first, second = self._run(scan=self.SCAN)
+        self.assertIn("Security checks", first)
+        self.assertIn("PermitRootLogin no", first)   # the fix hint
+        self.assertIn("/var/www/.env", first)
+        self.assertEqual(first, second)
+        self.assertEqual(first.count("<!-- exposure-analyzer:security-checks -->"), 1)
+
+    def test_without_scan_there_is_no_section(self):
+        first, _ = self._run()
+        self.assertNotIn("Security checks", first)
+
+    def test_scan_without_findings_still_says_so(self):
+        first, _ = self._run(scan={"scanners": {}})
+        self.assertIn("(no findings)", first)
+
+
 if __name__ == "__main__":
     unittest.main()

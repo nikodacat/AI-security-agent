@@ -28,6 +28,7 @@ from .remediations import (
     render_markdown,
 )
 from .publisher import FixPublisher, remediations_from_verdicts
+from .hardening import collect_findings as collect_security_checks
 
 __all__ = [
     "Remediation",
@@ -37,5 +38,6 @@ __all__ = [
     "load_remediations",
     "render_html_section",
     "render_markdown",
+    "collect_security_checks",
     "__version__",
 ]

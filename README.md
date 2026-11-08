@@ -44,13 +44,13 @@ Verdicts: `CONFIRMED` / `MITIGATED_BY_CONFIG` / `MITIGATED_BY_EXPOSURE` /
 
 | Folder | What it does |
 |---|---|
-| `host-scanner/` | Reads the host: packages, configs, services, users, ports, application inventory (WordPress, composer, jar, npm, pip), unmanaged binaries. Also posture and leak scanners (sshd, sudoers, SUID, exposed `.env`/`.git`); these are **not yet fed to the analyzer or report**. |
+| `host-scanner/` | Reads the host: packages, configs, services, users, ports, application inventory (WordPress, composer, jar, npm, pip), unmanaged binaries. Also posture and leak scanners (sshd, sudoers, SUID, exposed `.env`/`.git`); their findings appear in the report's **Security checks** section (not in the CVE verdicts). |
 | `target-agent/` | `sec-agent-target`: the scanner as one Linux binary (no Python needed on the target). The default build needs glibc >= 2.28; `build-glibc217.sh` builds a variant for glibc >= 2.17, which is what jessie/stretch-era images such as the Vulhub ones need. Drop it into a container or server and run it. |
 | `cve-matcher/` | Matches an inventory against CISA KEV; version-checks against NVD. `nvd_discovery.py` (experimental) asks NVD directly for CVEs affecting each detected product and version. |
 | `network-prober/` | nmap-based view from outside: open ports, banners, best-guess service and version. Output is `network_state.json`. |
 | `exposure-analyzer/` | The AI layer: per-CVE verdicts, read-only probes, optional LLM-proposed probes behind a human-approval gate. Runs on Claude (Agent SDK) or any OpenAI-compatible endpoint, so it can run on a **local model**. |
 | `attack-simulator/` | For CONFIRMED verdicts only: a three-stage attack narrative (recon, discovery, exploitation) written as prose, with a guardrail that flags tool invocations. |
-| `fix-publisher/` | For CONFIRMED verdicts only: remediation drafts. Commands must be version-pinned `apt install` lines; shell metacharacters are rejected. For software not managed by apt it may return no apt command and explain why. |
+| `fix-publisher/` | For CONFIRMED verdicts only: remediation drafts. Commands must be version-pinned `apt install` lines; shell metacharacters are rejected. For software not managed by apt it may return no apt command and explain why. `hardening.py` adds a fixed fix hint to each posture/leak finding (no AI). |
 | `eval-lab/` | Three vulnerable Docker containers, the answer key (`ground_truth.yaml`), and the evaluation harness. |
 | `docs/` | Design, roadmap, verification record, schemas. |
 | `scripts/` | Bootstrap and local-scan helpers. |
@@ -352,8 +352,11 @@ CVEs for products it knows, and it says nothing about the rest. Notes:
   needs specific `mod_rewrite` rules was judged CONFIRMED because the module
   was loaded, although no rewrite rules exist.
 - **Local privilege escalations** can be presented as remotely reachable.
-- **Posture and leak findings** (sshd, sudoers, SUID, exposed secrets) are
-  collected but not yet part of the verdicts or the report.
+- **Security checks are rule-based.** The report lists the posture and leak
+  findings (sshd, sudoers, SUID, exposed secrets, EOL system, ...) with a fixed
+  fix hint per finding type (`fix-publisher/fix_publisher/hardening.py`). There is
+  no AI and no CVE matching in this part, and the checks cover only what
+  `host-scanner/scanners/posture.py` and `leaks.py` look for.
 - **Small evaluation.** Three self-built containers and an answer key written
   by the project author. The key has already needed one correction (see
   `eval-lab/ground_truth.md`, revision log). Treat the scores as a regression
