@@ -93,6 +93,18 @@ python run_full_scan.py --container eval-web-vuln --engine claude --v2 \
 costs one model call, so it is bounded by `--nvd-min-cvss` (default 7.0) and
 `--nvd-max-candidates` (default 40, highest score first).
 
+## Run from a browser
+
+```bash
+python -m gui          # http://127.0.0.1:8791/
+```
+
+A local page that wraps the commands above: pick a Docker container (or this
+computer, on Linux), choose the AI engine and options, press Run, watch the log,
+and open the report. It adds no scanning logic of its own and listens on
+127.0.0.1 only. Choosing the `claude` engine uses your Claude quota; the page
+shows the call and cost limits before you start.
+
 ## What you get
 
 A run writes these files (`eval-lab/reports/<container>/` for the container
@@ -328,4 +340,8 @@ exposure-analyzer 211, network-prober 41, attack-simulator 67, fix-publisher
 
 ## License
 
-MIT, see `LICENSE`.
+MIT, see `LICENSE`. It covers the code authored in this repository (`host-scanner/`,
+`cve-matcher/`, `exposure-analyzer/`, `attack-simulator/`, `fix-publisher/`,
+`network-prober/`, `eval-lab/`, `gui/`, and the top-level scripts and docs). The
+reference projects listed in `UPSTREAM.md` (PentestGPT, VulnBot, auto-pen-bench,
+genai-pentest-paper) are not part of this repository and keep their own licenses.
