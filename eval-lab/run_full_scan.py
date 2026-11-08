@@ -415,8 +415,9 @@ def main(argv: list[str] | None = None) -> int:
             report_path,
             attack_narratives_path=attack_json_path,
             remediations_path=remediations_json_path,
+            scan=scan,
         )
-        sections = ["Verdicts"]
+        sections = ["Verdicts", "Security checks"]
         if attack_json_path:
             sections.append("Attack Narratives")
         if remediations_json_path:

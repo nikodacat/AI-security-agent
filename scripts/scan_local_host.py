@@ -257,7 +257,7 @@ def _finalize_report(scan: dict[str, Any], out_dir: Path, verdicts) -> int:
                                     executive=executive)
     html_path = out_dir / "report.html"
     render_html(report_data, str(html_path))
-    append_verdicts_to_report(verdicts, html_path)
+    append_verdicts_to_report(verdicts, html_path, scan=scan)
     print(f"      wrote report -> {html_path}")
     return 0
 
