@@ -110,6 +110,23 @@ Go service listens on 10086). It is not "exploitable". No human review of the 76
 This says the model does not invent ports, versions or probe results. It does NOT say the verdict is correct, and it cannot
 check inferences such as "this library is used by the exposed service" (the weak point of the 20-reason human check).
 
+### 4d. Controls: patched version and not-exposed (`eval-lab/run_controls.py`, Claude, scan file + network probe, 2 runs each)
+
+| Target (same config except the one change) | CVEs checked | Judgements | Result |
+|---|---|---|---|
+| httpd 2.4.49 (baseline, answer key) | CVE-2021-41773, CVE-2021-42013 | 4 | 4 CONFIRMED |
+| httpd 2.4.62 (patched) | same | 4 | 4 MITIGATED_BY_CONFIG |
+| httpd 2.4.49, Listen 127.0.0.1 | same | 4 | 4 MITIGATED_BY_EXPOSURE |
+| redis 6.2.6, bind 127.0.0.1 | the 9 CVEs the tool CONFIRMED on the redis baseline in both runs | 18 | 18 MITIGATED_BY_EXPOSURE |
+| redis 6.2.14 (informational) | same 9 | 18 | 1 no longer a candidate (fixed in 6.2.13); 8 still listed by NVD as affecting 6.2.14, CONFIRMED |
+
+False CONFIRMED on the patched / not-exposed controls: 0 of 26, and all 26 are the expected verdict. 12 valid runs cost about $2.9.
+Caveats: two products, one model, 2 runs; the redis CVE set is the tool's own baseline verdict, so it shows the verdict flips with the
+condition, not accuracy. Known error on the baseline: httpd CVE-2019-0211 (answer key: MITIGATED_BY_CONFIG, 2.4.49 is past the 2.4.39 fix)
+was CONFIRMED in both runs, citing a wrong fix version ("fixed in 2.4.50"); `check_evidence.py` skips advisory data, so it cannot catch this.
+Two set-up mistakes were fixed along the way (redis CVEs taken from the answer key are not in NVD's list for 6.2.6; the loopback redis was
+scanned before it had started) and the invalid runs were discarded.
+
 ## 5. Cost and effort
 
 | Item | Number | Caveat |

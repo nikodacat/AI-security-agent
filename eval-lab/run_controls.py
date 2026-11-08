@@ -6,10 +6,15 @@ The answer key is fixed by how each target is built, not by anyone's judgment:
   H1 / R1   the same product at a fixed version (httpd 2.4.62 / redis 6.2.14)  -> not CONFIRMED
   H2 / R2   the same vulnerable version, but listening on 127.0.0.1 only       -> not CONFIRMED
 
-For each target the controlled CVEs are those the lab answer key marks CONFIRMED on H0/R0
-(httpd CVE-2021-41773 and CVE-2021-42013; redis CVE-2022-24735 and CVE-2022-24736).
-H1/H2 and R1/R2 have the identical configuration as H0/R0 apart from the one thing changed.
-A CONFIRMED on H1/H2/R1/R2 is a false CONFIRMED; a missing CONFIRMED on H0/R0 is a miss.
+The controlled CVEs are, for httpd, CVE-2021-41773 and CVE-2021-42013 (the lab answer key marks them
+CONFIRMED on H0). For redis they are the CVEs the tool itself judged CONFIRMED on R0 in every run
+(the lab's two redis CVEs are not in NVD's list for 6.2.6, so they cannot be used).
+H1/H2 and R2 have the identical configuration as H0/R0 apart from the one thing changed.
+A CONFIRMED on H1, H2 or R2 is a false CONFIRMED; a missing CONFIRMED on H0/R0 is a miss.
+
+R1 (redis 6.2.14) is informational only: redis CVEs come from NVD discovery, which already drops the CVEs
+NVD says are fixed in the installed version, so a CVE that is still a candidate is one NVD still lists as
+affecting 6.2.14, and CONFIRMED on it is not a false CONFIRMED.
 
 Needs Docker with the eval-lab containers up (eval-lab/docker-compose.yml), the single-file scanner
 at target-agent/dist/sec-agent-target, and a Claude engine for run_full_scan.py.
@@ -34,7 +39,7 @@ NETWORK = "eval-lab_evallab"
 PORTS = "22,80,443,3306,6379,8000-8100"
 
 HTTPD_CVES = ["CVE-2021-41773", "CVE-2021-42013"]
-REDIS_CVES = ["CVE-2022-24735", "CVE-2022-24736"]
+REDIS_CVES = "R0"  # derived from the R0 verdicts (see controlled_cves); redis CVEs come from --nvd-discovery
 
 # like-for-like config the lab's web-vuln Dockerfile adds to the stock httpd.conf
 _HTTPD_CONF = "/usr/local/apache2/conf/httpd.conf"
@@ -46,14 +51,14 @@ _HTTPD_LAB_TWEAKS = (
 
 TARGETS: dict[str, dict] = {
     "H0": {"existing": "eval-web-vuln", "cves": HTTPD_CVES, "expect": "CONFIRMED"},
-    "H1": {"name": "ctl-httpd-patched", "image": "httpd:2.4.62", "cves": HTTPD_CVES, "expect": "not CONFIRMED",
+    "H1": {"name": "ctl-httpd-patched", "image": "httpd:2.4.62", "cves": HTTPD_CVES, "expect": "not CONFIRMED", "port": 80,
            "cmd": ["sh", "-c", _HTTPD_LAB_TWEAKS + "exec httpd-foreground"]},
-    "H2": {"name": "ctl-httpd-local", "image": "eval-lab-web-vuln", "cves": HTTPD_CVES, "expect": "not CONFIRMED",
+    "H2": {"name": "ctl-httpd-local", "image": "eval-lab-web-vuln", "cves": HTTPD_CVES, "expect": "not CONFIRMED", "port": 80,
            "cmd": ["sh", "-c", f"sed -i 's/^Listen 80/Listen 127.0.0.1:80/' {_HTTPD_CONF}; exec httpd-foreground"]},
-    "R0": {"existing": "eval-db-exposed", "cves": REDIS_CVES, "expect": "CONFIRMED"},
-    "R1": {"name": "ctl-redis-patched", "image": "redis:6.2.14", "cves": REDIS_CVES, "expect": "not CONFIRMED",
+    "R0": {"existing": "eval-db-exposed", "cves": REDIS_CVES, "extra": ["--nvd-discovery"], "expect": "CONFIRMED"},
+    "R1": {"name": "ctl-redis-patched", "image": "redis:6.2.14", "cves": REDIS_CVES, "extra": ["--nvd-discovery"], "expect": "info", "port": 6379,
            "cmd": ["redis-server", "--bind", "0.0.0.0", "--protected-mode", "no"]},
-    "R2": {"name": "ctl-redis-local", "image": "eval-lab-db-exposed", "cves": REDIS_CVES, "expect": "not CONFIRMED",
+    "R2": {"name": "ctl-redis-local", "image": "eval-lab-db-exposed", "cves": REDIS_CVES, "extra": ["--nvd-discovery"], "expect": "not CONFIRMED", "port": 6379,
            "cmd": ["redis-server", "/usr/local/etc/redis/redis.conf", "--bind", "127.0.0.1", "--protected-mode", "yes"]},
 }
 
@@ -66,8 +71,23 @@ def start_container(t: dict) -> str:
     name = t["name"]
     sh("docker", "rm", "-f", name, check=False, out=subprocess.DEVNULL)
     sh("docker", "run", "-d", "--name", name, "--network", NETWORK, t["image"], *t["cmd"], out=subprocess.DEVNULL)
-    time.sleep(5)
+    wait_listening(name, t["port"])
     return name
+
+
+def wait_listening(name: str, port: int, timeout: int = 60) -> None:
+    """Wait until `port` is open inside the container. Some images do slow start-up work first
+    (the redis entrypoint chowns /data), and a scan taken too early sees no service at all."""
+    hexport = f":{port:04X}"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = subprocess.run(["docker", "exec", name, "sh", "-c", "cat /proc/net/tcp /proc/net/tcp6"],
+                           capture_output=True, text=True)
+        if any(hexport in line and " 0A " in line for line in r.stdout.splitlines()):
+            time.sleep(1)
+            return
+        time.sleep(1)
+    raise RuntimeError(f"{name}: port {port} not listening after {timeout}s")
 
 
 def scan_container(name: str, dest: Path) -> None:
@@ -76,11 +96,12 @@ def scan_container(name: str, dest: Path) -> None:
         sh("docker", "exec", name, "/tmp/sat", out=f)
 
 
-def analyze(label: str, scan: Path, out_dir: Path) -> int:
+def analyze(label: str, scan: Path, out_dir: Path, extra: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = [sys.executable, str(HERE / "run_full_scan.py"), "--scan-json", str(scan), "--label", label,
            "--prober", "docker", "--prober-target", label, "--prober-ports", PORTS,
-           "--banner-candidates", "--engine", "claude", "--max-cost-usd", "1.5", "--out-dir", str(out_dir)]
+           "--banner-candidates", "--engine", "claude", "--max-cost-usd", "1.5", "--out-dir", str(out_dir),
+           *(extra or [])]
     log = out_dir / "run.log"
     env = {**__import__("os").environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     with log.open("w", encoding="utf-8") as f:
@@ -98,11 +119,26 @@ def cmd_run(args: argparse.Namespace) -> int:
         scan_container(name, scan)
         print(f"[{key}] scanned {name} -> {scan.name}", flush=True)
         for r in range(1, args.runs + 1):
-            rc = analyze(name, scan, out / key / f"r{r}")
+            rc = analyze(name, scan, out / key / f"r{r}", t.get("extra"))
             print(f"[{key}] run {r}: rc={rc}", flush=True)
         if not t.get("existing") and not args.keep:
             sh("docker", "rm", "-f", name, check=False, out=subprocess.DEVNULL)
     return cmd_summary(args)
+
+
+def controlled_cves(out: Path, key: str) -> list[str]:
+    cves = TARGETS[key]["cves"]
+    if cves != "R0":
+        return cves
+    runs = [out / "R0" / p.name / "verdicts.json" for p in sorted((out / "R0").glob("r*"))]
+    sets = []
+    for path in runs:
+        if path.is_file():
+            data = json.loads(path.read_text(encoding="utf-8")).get("verdicts", [])
+            cand = json.loads((path.parent / "candidates.json").read_text(encoding="utf-8")).get("kev_findings", [])
+            redis = {c["cve_id"] for c in cand if "redis" in str(c.get("package_name") or c.get("package") or "").lower()}
+            sets.append({v["cve_id"] for v in data if v.get("verdict") == "CONFIRMED" and v["cve_id"] in redis})
+    return sorted(set.intersection(*sets)) if sets else []
 
 
 def verdict_of(out: Path, key: str, r: int, cve: str) -> str:
@@ -124,13 +160,15 @@ def cmd_summary(args: argparse.Namespace) -> int:
     for key, t in TARGETS.items():
         runs = sorted(int(p.name[1:]) for p in (out / key).glob("r*") if (p / "verdicts.json").is_file()) if (out / key).is_dir() else []
         for r in runs:
-            for cve in t["cves"]:
+            for cve in controlled_cves(out, key):
                 v = verdict_of(out, key, r, cve)
                 rows.append({"target": key, "cve": cve, "run": r, "verdict": v, "expect": t["expect"]})
                 print(f"{key:6s}  {cve:15s}  r{r}   {v}")
                 if t["expect"] == "CONFIRMED":
                     total_base += 1
                     missed += v != "CONFIRMED"
+                elif t["expect"] == "info":
+                    pass
                 else:
                     total_control += 1
                     false_confirmed += v == "CONFIRMED"
