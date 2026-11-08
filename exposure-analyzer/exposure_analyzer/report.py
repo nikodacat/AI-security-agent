@@ -181,7 +181,7 @@ def _strip_marked_block(doc: str, marker: str) -> str:
     start = doc.find(marker)
     if start == -1:
         return doc
-    end_marker = marker + " end"
+    end_marker = marker.replace("-->", "end -->")
     end = doc.find(end_marker, start)
     if end == -1:
         return doc
@@ -234,7 +234,7 @@ def _render_verdicts_section(verdicts: list[Verdict]) -> str:
       </tbody>
     </table>
   </div>
-{_SECTION_MARKER} end"""
+{_SECTION_MARKER.replace("-->", "end -->")}"""
 
 
 def _render_row(v: Verdict) -> str:

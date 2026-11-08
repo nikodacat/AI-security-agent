@@ -118,6 +118,68 @@ class TestLog4jProbe(unittest.TestCase):
             self.assertNotRegex(path, combined, f"{path} should not match")
 
 
+class TestEvalCmsPluginProbes(unittest.TestCase):
+    """Signals for the OpenSSL / bash / ghostscript / Apache-proxy probes."""
+
+    def _hits(self, cve_id: str, output: str) -> bool:
+        return any(re.search(p, output, re.M) for p in KNOWN_PROBES[cve_id].expected_signals)
+
+    def test_heartbleed_only_matches_1_0_1_through_f(self):
+        self.assertTrue(self._hits("CVE-2014-0160", "OpenSSL 1.0.1f 6 Jan 2014"))
+        self.assertTrue(self._hits("CVE-2014-0160", "OpenSSL 1.0.1 14 Mar 2012"))
+        self.assertFalse(self._hits("CVE-2014-0160", "OpenSSL 1.0.1g 7 Apr 2014"))
+        self.assertFalse(self._hits("CVE-2014-0160", "OpenSSL 1.1.1d  10 Sep 2019"))
+
+    def test_shellshock_matches_only_when_marker_is_echoed(self):
+        self.assertTrue(self._hits("CVE-2014-6278", "SHELLSHOCK_VULNERABLE\nprobe_done"))
+        self.assertFalse(self._hits("CVE-2014-6278", "probe_done"))
+
+    def test_ghostscript_matches_before_9_21(self):
+        self.assertTrue(self._hits("CVE-2017-8291", "9.20\nghostscript\t9.20~dfsg-3"))
+        self.assertTrue(self._hits("CVE-2017-8291", "9.5"))
+        self.assertFalse(self._hits("CVE-2017-8291", "9.21"))
+        self.assertFalse(self._hits("CVE-2017-8291", "9.27"))
+
+    def test_openssl_0778_range(self):
+        self.assertTrue(self._hits("CVE-2022-0778", "OpenSSL 1.1.1m  14 Dec 2021"))
+        self.assertTrue(self._hits("CVE-2022-0778", "OpenSSL 1.1.1d  10 Sep 2019"))
+        self.assertFalse(self._hits("CVE-2022-0778", "OpenSSL 1.1.1n  15 Mar 2022"))
+        self.assertFalse(self._hits("CVE-2022-0778", "OpenSSL 3.0.2 15 Mar 2022"))
+
+    def test_openssl_3711_range(self):
+        self.assertTrue(self._hits("CVE-2021-3711", "OpenSSL 1.1.1k  25 Mar 2021"))
+        self.assertFalse(self._hits("CVE-2021-3711", "OpenSSL 1.1.1l  24 Aug 2021"))
+
+    def test_apache_proxy_matches_only_with_module_loaded(self):
+        self.assertTrue(self._hits("CVE-2021-40438", " proxy_module (shared)\nServer version: Apache/2.4.48"))
+        self.assertFalse(self._hits("CVE-2021-40438", "Server version: Apache/2.4.38 (Debian)"))
+
+    def test_apache_probes_fall_back_to_apache2_binary(self):
+        for cve in ("CVE-2021-42013", "CVE-2021-41773"):
+            self.assertIn("apache2 -v", KNOWN_PROBES[cve].command)
+
+
+class TestPhpProbes(unittest.TestCase):
+    def _hits(self, cve_id: str, output: str) -> bool:
+        return any(re.search(p, output) for p in KNOWN_PROBES[cve_id].expected_signals)
+
+    def test_vulnerable_versions_match(self):
+        for v in ("7.4.21", "7.3.0", "8.0.30", "8.1.2", "8.2.34", "8.2.0", "8.3.35", "8.4.26", "8.5.11"):
+            self.assertTrue(self._hits("CVE-2026-109618", f"PHP {v} (cli)"), v)
+            self.assertTrue(self._hits("CVE-2026-109619", f"PHP {v} (cli)"), v)
+
+    def test_fixed_versions_do_not_match(self):
+        for v in ("8.2.35", "8.2.40", "8.3.36", "8.4.27", "8.5.12", "8.5.20", "9.0.0"):
+            self.assertFalse(self._hits("CVE-2026-109618", f"PHP {v} (cli)"), v)
+            self.assertFalse(self._hits("CVE-2026-109619", f"PHP {v} (cli)"), v)
+
+    def test_range_start_differs_between_the_two(self):
+        self.assertFalse(self._hits("CVE-2026-109618", "PHP 7.2.10 (cli)"))
+        self.assertTrue(self._hits("CVE-2026-109619", "PHP 7.2.10 (cli)"))
+        self.assertTrue(self._hits("CVE-2026-109619", "PHP 5.4.0 (cli)"))
+        self.assertFalse(self._hits("CVE-2026-109619", "PHP 5.3.29 (cli)"))
+
+
 class TestProbeLibraryContract(unittest.TestCase):
     """Whole-library invariants that catch drift when new probes are added."""
 

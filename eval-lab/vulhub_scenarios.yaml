@@ -1,0 +1,111 @@
+# Vulhub scenarios for the external-answer-key evaluation (v3-6b).
+#
+# The answer key here is NOT written by this project: each Vulhub directory
+# exists to demonstrate one named CVE on one pinned image. `expected` is that
+# CVE and is the only thing scored as recall. Other CVEs the tool raises on the
+# same image have no answer key and stay "unreviewed".
+#
+# `dir` is relative to the Vulhub clone (default C:/Users/ideal/vulhub, override
+# with --vulhub). `expected` null means the scenario is an exposure pattern with
+# no CVE id (recorded, not scored).
+
+scenarios:
+  - {name: bash-shellshock,   dir: bash/CVE-2014-6271,      expected: CVE-2014-6271,  famous: true}
+  - {name: solr-log4shell,    dir: log4j/CVE-2021-44228,    expected: CVE-2021-44228, famous: true}
+  - {name: struts2-s2-045,    dir: struts2/s2-045,          expected: CVE-2017-5638,  famous: true}
+  - {name: php-cgi-5-4-1,     dir: php/CVE-2012-1823,       expected: CVE-2012-1823,  many_cves: true}
+  - {name: nginx-1-13-2,      dir: nginx/CVE-2017-7529,     expected: CVE-2017-7529,  many_cves: true}
+  - {name: redis-4-0-14,      dir: redis/4-unacc,           expected: null,           many_cves: true}
+
+  # Batch 2 (2026-11-01): ten more, so there are 15 scored scenarios.
+  - {name: httpd-2-4-49,      dir: httpd/CVE-2021-41773,    expected: CVE-2021-41773, famous: true}
+  - {name: tomcat-ghostcat,   dir: tomcat/CVE-2020-1938,    expected: CVE-2020-1938,  famous: true}
+  - {name: jenkins-2-138,     dir: jenkins/CVE-2018-1000861, expected: CVE-2018-1000861}
+  - {name: spring4shell,      dir: spring/CVE-2022-22965,   expected: CVE-2022-22965, famous: true}
+  - {name: shiro-1-2-4,       dir: shiro/CVE-2016-4437,     expected: CVE-2016-4437}
+  - {name: drupalgeddon2,     dir: drupal/CVE-2018-7600,    expected: CVE-2018-7600,  famous: true}
+  - {name: phpmyadmin-4-8-1,  dir: phpmyadmin/CVE-2018-12613, expected: CVE-2018-12613}
+  - {name: activemq-5-17-3,   dir: activemq/CVE-2023-46604, expected: CVE-2023-46604, famous: true}
+  - {name: sambacry,          dir: samba/CVE-2017-7494,     expected: CVE-2017-7494,  famous: true}
+  - {name: elasticsearch-1-4-2, dir: elasticsearch/CVE-2015-1427, expected: CVE-2015-1427}
+
+  # Held-out set (2026-11-01). Chosen and committed BEFORE any of these was pulled or run, after
+  # the library/banner discovery work (v3-7) was tuned on the 15 scenarios above. Those 15 are
+  # development data now; report these twelve separately. The pick spans the ecosystems the new
+  # code reads (Maven, PyPI, npm) plus banner-only services, and was not filtered by whether the
+  # tool is expected to find them: every scenario stays in the table whatever happens.
+  - {name: nexus-3-21-1,      dir: nexus/CVE-2020-10199,    expected: CVE-2020-10199, heldout: true}
+  - {name: rocketmq-5-1-0,    dir: rocketmq/CVE-2023-37582, expected: CVE-2023-37582, heldout: true}
+  - {name: ofbiz-17-12-01,    dir: ofbiz/CVE-2020-9496,     expected: CVE-2020-9496,  heldout: true}
+  - {name: django-4-0-5,      dir: django/CVE-2022-34265,   expected: CVE-2022-34265, heldout: true}
+  - {name: airflow-1-10-10,   dir: airflow/CVE-2020-11978,  expected: CVE-2020-11978, heldout: true, pre_run: airflow-init, service: airflow-webserver}
+  - {name: mongo-express-0-53, dir: mongo-express/CVE-2019-10758, expected: CVE-2019-10758, heldout: true}
+  - {name: couchdb-1-6-0,     dir: couchdb/CVE-2017-12636,  expected: CVE-2017-12636, heldout: true}
+  - {name: jboss-as-6-1-0,    dir: jboss/CVE-2017-12149,    expected: CVE-2017-12149, heldout: true}
+  - {name: confluence-7-13-6, dir: confluence/CVE-2022-26134, expected: CVE-2022-26134, heldout: true}
+  - {name: spring-cloud-gateway-3-1-0, dir: spring/CVE-2022-22947, expected: CVE-2022-22947, heldout: true}
+  - {name: solr-8-2-0,        dir: solr/CVE-2019-17558,     expected: CVE-2019-17558, heldout: true}
+  - {name: saltstack-2019-2-3, dir: saltstack/CVE-2020-11651, expected: CVE-2020-11651, heldout: true}
+
+  # Held-out set 2 (2026-11-03). The first twelve held-out scenarios were tuned against, so they
+  # are development data now. These ten were chosen and committed BEFORE any image was pulled,
+  # scanned or run, and before any result for them exists. Rule, fixed in advance: one product
+  # family per language/ecosystem the scanner reads or is meant to read (Go, Java, PHP, Ruby,
+  # Node/npm, C daemon, PyPI, hand-installed web apps), taking the first CVE-named directory
+  # in alphabetical order that pins an image (no `build:`), so no scenario was picked for how
+  # the tool is expected to do on it. Ruby (rails) is included knowing the scanner does not
+  # read RubyGems; it stays in the table whatever happens. Report these separately and do
+  # not change scanner or matcher code between a first run and the number that gets reported.
+  # CORRECTION (2026-11-03, after the first run): kibana and zabbix are multi-image stacks and the
+  # harness had scanned the wrong container (Elasticsearch; the Zabbix server instead of the
+  # web UI). The `image:` field names the component the CVE is in, per each Vulhub README.
+  - {name: grafana-8-2-6,     dir: grafana/CVE-2021-43798,   expected: CVE-2021-43798, heldout2: true}
+  - {name: flink-1-11-2,      dir: flink/CVE-2020-17518,     expected: CVE-2020-17518, heldout2: true}
+  - {name: wordpress-6-9-4,   dir: wordpress/CVE-2026-63030, expected: CVE-2026-63030, heldout2: true}
+  - {name: joomla-3-4-5,      dir: joomla/CVE-2015-8562,     expected: CVE-2015-8562,  heldout2: true}
+  - {name: rails-5-0-7,       dir: rails/CVE-2018-3760,      expected: CVE-2018-3760,  heldout2: true}
+  - {name: kibana-5-6-12,     dir: kibana/CVE-2018-17246,    expected: CVE-2018-17246, heldout2: true, image: "vulhub/kibana:5.6.12"}
+  - {name: postgres-9-6-7,    dir: postgres/CVE-2018-1058,   expected: CVE-2018-1058,  heldout2: true}
+  - {name: zabbix-3-0-3,      dir: zabbix/CVE-2016-10134,    expected: CVE-2016-10134, heldout2: true, image: "vulhub/zabbix:3.0.3-web"}
+  - {name: superset-2-0-1,    dir: superset/CVE-2023-27524,  expected: CVE-2023-27524, heldout2: true}
+  - {name: nacos-1-4-0,       dir: nacos/CVE-2021-29441,     expected: CVE-2021-29441, heldout2: true}
+
+  # Held-out set 3 (2026-11-03). Chosen by `pick_heldout3.py` (committed alongside) BEFORE any image
+  # was pulled, scanned or run, and with no result for these ten in existence. Rule: pool = Vulhub
+  # dirs named CVE-*, pinned image, no `build:`, product family not used in sets 1-2; shuffle with
+  # random.Random(20261103); take the first ten with a distinct product whose vulhub/* images are
+  # each <= 1000 MB compressed (only polkit was skipped, for size). Nothing was picked for how the
+  # tool is expected to do: the draw happens to contain no Ruby and no guaranteed Alpine image, and
+  # it is not redrawn. This is the last blind set before the feature freeze (~2026-11-10): report
+  # the first run as it comes out and change no scanner or matcher code before reporting it.
+  - {name: minio-2023-02-27,   dir: minio/CVE-2023-28432,        expected: CVE-2023-28432, heldout3: true}
+  - {name: gradio-4-12-0,      dir: gradio/CVE-2024-1561,        expected: CVE-2024-1561,  heldout3: true}
+  - {name: jumpserver-3-6-3,   dir: jumpserver/CVE-2023-42820,   expected: CVE-2023-42820, heldout3: true, image: "vulhub/jumpserver:3.6.3"}
+  - {name: metabase-0-46-6,    dir: metabase/CVE-2023-38646,     expected: CVE-2023-38646, heldout3: true}
+  - {name: 1panel-1-10-10,     dir: 1panel/CVE-2024-39907,       expected: CVE-2024-39907, heldout3: true}
+  - {name: coldfusion-2018-0-15, dir: coldfusion/CVE-2023-29300, expected: CVE-2023-29300, heldout3: true}
+  - {name: geoserver-2-17-2,   dir: geoserver/CVE-2022-24816,    expected: CVE-2022-24816, heldout3: true}
+  - {name: jimureport-1-6-0,   dir: jimureport/CVE-2023-4450,    expected: CVE-2023-4450,  heldout3: true, image: "vulhub/jimureport:1.6.0"}
+  - {name: druid-0-20-0,       dir: apache-druid/CVE-2021-25646, expected: CVE-2021-25646, heldout3: true}
+  - {name: elfinder-2-1-58,    dir: elfinder/CVE-2021-32682,     expected: CVE-2021-32682, heldout3: true}
+
+  # Held-out set 4 (2026-11-05). Chosen by `pick_heldout4.py` (committed alongside) BEFORE any image
+  # was pulled, scanned or run, and with no result for these ten in existence. Same rule as set 3
+  # (pool = CVE-* dirs, pinned image, no `build:`, product family not used in sets 1-3; shuffle with
+  # random.Random(20261105); first ten with a distinct product, every vulhub/* image <= 1000 MB
+  # compressed); nothing skipped. Not redrawn although `ghostscript` and `imagemagick` happen to use
+  # two ImageMagick builds, and `pgadmin`'s image is a multi-arch list (size -1 in the check).
+  # `image:` for the three multi-image stacks was set from each README (the component the CVE is in)
+  # before the first run. The Vulhub clone was NOT pulled since set 3 (HEAD 8fd6391).
+  # Same discipline as set 3: report the first run as it comes out; change no scanner or matcher
+  # code before reporting it. This is the last blind set before the feature freeze (~2026-11-10).
+  - {name: vite-6-2-5,          dir: vite/CVE-2025-32395,           expected: CVE-2025-32395, heldout4: true}
+  - {name: ingress-nginx-1-9-5, dir: ingress-nginx/CVE-2025-1974,   expected: CVE-2025-1974,  heldout4: true}
+  - {name: chartbrew-4-8-0,     dir: chartbrew/CVE-2026-25887,      expected: CVE-2026-25887, heldout4: true, image: "vulhub/chartbrew:4.8.0"}
+  - {name: cgi-httpoxy-php,     dir: cgi/CVE-2016-5385,             expected: CVE-2016-5385,  heldout4: true, image: "vulhub/php:httpoxy"}
+  - {name: pgadmin-9-1,         dir: pgadmin/CVE-2025-2945,         expected: CVE-2025-2945,  heldout4: true, image: "vulhub/pgadmin:9.1"}
+  - {name: imagemagick-7-1-0-49, dir: imagemagick/CVE-2022-44268,   expected: CVE-2022-44268, heldout4: true}
+  - {name: laravel-8-4-2,       dir: laravel/CVE-2021-3129,         expected: CVE-2021-3129,  heldout4: true}
+  - {name: adminer-4-7-8,       dir: adminer/CVE-2021-21311,        expected: CVE-2021-21311, heldout4: true}
+  - {name: erlang-27-3-2,       dir: erlang/CVE-2025-32433,         expected: CVE-2025-32433, heldout4: true}
+  - {name: ghostscript-7-0-8-27, dir: ghostscript/CVE-2019-6116,    expected: CVE-2019-6116,  heldout4: true}

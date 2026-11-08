@@ -69,6 +69,14 @@ class Verdict:
     timestamp: str = ""
     proposed_probe: dict[str, Any] | None = None
     probe_proposal_error: str = ""
+    # v3-5: where the candidate's package came from, copied from the candidate so
+    # fix-publisher can tell apt-managed software from source-built / library
+    # installs without asking the model. Empty on verdicts written before v3-5.
+    package_name: str = ""
+    package_version: str = ""
+    installed_version: str = ""   # full apt version when known (banner candidates)
+    package_source: str = ""
+    candidate_source: str = ""
 
     def __post_init__(self) -> None:
         if not self.timestamp:
@@ -96,6 +104,11 @@ class Verdict:
             timestamp=d.get("timestamp", ""),
             proposed_probe=d.get("proposed_probe"),
             probe_proposal_error=d.get("probe_proposal_error", ""),
+            package_name=d.get("package_name", ""),
+            package_version=d.get("package_version", ""),
+            installed_version=d.get("installed_version", ""),
+            package_source=d.get("package_source", ""),
+            candidate_source=d.get("candidate_source", ""),
         )
 
 

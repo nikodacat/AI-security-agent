@@ -13,6 +13,7 @@ from exposure_analyzer.agent import (
     AgentConfig,
     ExposureAgent,
     _parse_verdict_response,
+    build_openai_compatible_verdict_fn,
 )
 from exposure_analyzer.hitl import ApprovalGate, Decision, load_learned_probes
 from exposure_analyzer.probes import ProbeTemplate
@@ -133,6 +134,56 @@ class TestExposureAgentBatch(unittest.TestCase):
 
         self.assertEqual([v.cve_id for v in verdicts], ["CVE-A", "CVE-B", "CVE-C"])
         self.assertEqual(calls, ["Candidate: CVE-A", "Candidate: CVE-B", "Candidate: CVE-C"])
+
+    def test_batch_retries_unparseable_reply_once(self):
+        attempts: dict[str, int] = {}
+
+        async def flaky_llm(system_prompt: str, user_prompt: str) -> str:
+            cve = user_prompt.splitlines()[0].split()[-1]
+            attempts[cve] = attempts.get(cve, 0) + 1
+            if cve == "CVE-B" and attempts[cve] == 1:
+                return '{"verdict": ...}'  # small local models do this
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "ok"})
+
+        candidates = [dict(_SAMPLE_CANDIDATE, cve_id=c) for c in ("CVE-A", "CVE-B", "CVE-C")]
+        agent = ExposureAgent(verdict_fn=flaky_llm, config=AgentConfig(run_probes=False))
+        verdicts = _run(agent.analyze_batch(candidates, _SAMPLE_HOST_STATE))
+
+        self.assertEqual([v.cve_id for v in verdicts], ["CVE-A", "CVE-B", "CVE-C"])
+        self.assertEqual(attempts["CVE-B"], 2)
+        self.assertEqual(agent.last_batch_errors, [])
+
+    def test_batch_isolates_a_candidate_that_keeps_failing(self):
+        async def llm(system_prompt: str, user_prompt: str) -> str:
+            if "CVE-B" in user_prompt.splitlines()[0]:
+                return "not json at all"
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "ok"})
+
+        candidates = [dict(_SAMPLE_CANDIDATE, cve_id=c) for c in ("CVE-A", "CVE-B", "CVE-C")]
+        agent = ExposureAgent(verdict_fn=llm, config=AgentConfig(run_probes=False))
+        verdicts = _run(agent.analyze_batch(candidates, _SAMPLE_HOST_STATE))
+
+        # The failure is reported, not papered over with an invented verdict.
+        self.assertEqual([v.cve_id for v in verdicts], ["CVE-A", "CVE-C"])
+        self.assertEqual([c for c, _ in agent.last_batch_errors], ["CVE-B"])
+        self.assertIn("ValueError", agent.last_batch_errors[0][1])
+
+    def test_batch_isolates_transport_errors_without_retrying(self):
+        calls: list[str] = []
+
+        async def llm(system_prompt: str, user_prompt: str) -> str:
+            cve = user_prompt.splitlines()[0].split()[-1]
+            calls.append(cve)
+            if cve == "CVE-B":
+                raise RuntimeError("connection reset")
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "ok"})
+
+        candidates = [dict(_SAMPLE_CANDIDATE, cve_id=c) for c in ("CVE-A", "CVE-B", "CVE-C")]
+        agent = ExposureAgent(verdict_fn=llm, config=AgentConfig(run_probes=False))
+        verdicts = _run(agent.analyze_batch(candidates, _SAMPLE_HOST_STATE))
+
+        self.assertEqual([v.cve_id for v in verdicts], ["CVE-A", "CVE-C"])
+        self.assertEqual(calls.count("CVE-B"), 1)
 
 
 # --- v2: network_state passthrough -------------------------------------------
@@ -525,6 +576,192 @@ class TestExposureAgentHITL(unittest.TestCase):
         self.assertIsNotNone(verdicts[0].proposed_probe)
         self.assertIsNotNone(verdicts[1].proposed_probe)
         mock_input.assert_called_once()
+
+
+class TestBuildOpenAICompatibleVerdictFn(unittest.TestCase):
+    def test_posts_messages_and_returns_content(self):
+        import httpx
+
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            captured["headers"] = dict(request.headers)
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": '{"verdict": "CONFIRMED"}'}}]},
+            )
+
+        verdict_fn = build_openai_compatible_verdict_fn(
+            base_url="http://192.168.50.55:8080/v1/chat/completions",
+            model="qwen",
+        )
+
+        # Swap in the mock transport the same way httpx recommends for tests:
+        # monkeypatch AsyncClient to route through a MockTransport instead of
+        # the network. We do this by patching httpx.AsyncClient's default
+        # transport via the `transport=` kwarg path exercised in _call.
+        orig_async_client = httpx.AsyncClient
+
+        def _mock_client(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return orig_async_client(*args, **kwargs)
+
+        with patch("httpx.AsyncClient", side_effect=_mock_client):
+            result = _run(verdict_fn("SYSTEM", "USER"))
+
+        self.assertEqual(result, '{"verdict": "CONFIRMED"}')
+        self.assertEqual(captured["url"], "http://192.168.50.55:8080/v1/chat/completions")
+        self.assertEqual(captured["body"]["model"], "qwen")
+        self.assertEqual(captured["body"]["stream"], False)
+        # A runaway generation on a single-slot local server stalls every later request.
+        self.assertEqual(captured["body"]["max_tokens"], 2048)
+        self.assertEqual(
+            captured["body"]["messages"],
+            [{"role": "system", "content": "SYSTEM"}, {"role": "user", "content": "USER"}],
+        )
+        self.assertNotIn("authorization", captured["headers"])
+
+    def test_sends_bearer_token_when_api_key_given(self):
+        import httpx
+
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["headers"] = dict(request.headers)
+            return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+        verdict_fn = build_openai_compatible_verdict_fn(
+            base_url="http://localhost:8080/v1/chat/completions",
+            model="qwen",
+            api_key="secret-token",
+        )
+
+        orig_async_client = httpx.AsyncClient
+
+        def _mock_client(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return orig_async_client(*args, **kwargs)
+
+        with patch("httpx.AsyncClient", side_effect=_mock_client):
+            _run(verdict_fn("SYSTEM", "USER"))
+
+        self.assertEqual(captured["headers"]["authorization"], "Bearer secret-token")
+
+    def test_raises_runtime_error_on_http_error_status(self):
+        import httpx
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500, text="internal error")
+
+        verdict_fn = build_openai_compatible_verdict_fn(
+            base_url="http://localhost:8080/v1/chat/completions",
+            model="qwen",
+        )
+
+        orig_async_client = httpx.AsyncClient
+
+        def _mock_client(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return orig_async_client(*args, **kwargs)
+
+        with patch("httpx.AsyncClient", side_effect=_mock_client):
+            with self.assertRaises(httpx.HTTPStatusError):
+                _run(verdict_fn("SYSTEM", "USER"))
+
+
+class TestCallBudget(unittest.TestCase):
+    def test_call_limit_blocks_the_next_call(self):
+        from exposure_analyzer.agent import BudgetExceeded, CallBudget
+        b = CallBudget(max_calls=2)
+        b.check(); b.record(None)
+        b.check(); b.record(None)
+        with self.assertRaises(BudgetExceeded):
+            b.check()
+
+    def test_cost_limit_uses_reported_cost(self):
+        from exposure_analyzer.agent import BudgetExceeded, CallBudget
+        b = CallBudget(max_cost_usd=0.05)
+        b.check(); b.record(0.03)
+        b.check(); b.record(0.03)  # now 0.06 >= 0.05
+        with self.assertRaises(BudgetExceeded):
+            b.check()
+
+    def test_no_limits_never_raises(self):
+        from exposure_analyzer.agent import CallBudget
+        b = CallBudget()
+        for _ in range(1000):
+            b.check(); b.record(1.0)
+
+    def test_batch_stops_and_keeps_verdicts_so_far(self):
+        from exposure_analyzer.agent import CallBudget
+        budget = CallBudget(max_calls=2)
+
+        async def verdict_fn(system: str, user: str) -> str:
+            budget.check()
+            budget.record(None)
+            return json.dumps({"verdict": "NO_EVIDENCE", "reason": "r", "evidence": {}})
+
+        agent = ExposureAgent(verdict_fn=verdict_fn, config=AgentConfig(run_probes=False))
+        cands = [dict(_SAMPLE_CANDIDATE, cve_id=f"CVE-2020-000{i}") for i in range(5)]
+        out = _run(agent.analyze_batch(cands, _SAMPLE_HOST_STATE))
+        self.assertEqual([v.cve_id for v in out], ["CVE-2020-0000", "CVE-2020-0001"])
+        self.assertIn("call limit 2", agent.stopped_by_budget)
+        self.assertEqual(agent.last_batch_errors, [])  # stopping is not a per-CVE failure
+
+    def test_claude_fn_checks_before_and_records_cost_after(self):
+        import sys
+        import types
+        from exposure_analyzer.agent import BudgetExceeded, CallBudget, build_claude_verdict_fn
+
+        class _Opts:
+            def __init__(self, **kw): pass
+
+        class ResultMessage:
+            total_cost_usd = 0.04
+
+        async def _query(prompt, options):
+            yield types.SimpleNamespace(text="{}")
+            yield ResultMessage()
+
+        fake = types.SimpleNamespace(query=_query, ClaudeAgentOptions=_Opts)
+        budget = CallBudget(max_calls=1)
+        with patch.dict(sys.modules, {"claude_agent_sdk": fake}):
+            fn = build_claude_verdict_fn(budget)
+            _run(fn("S", "U"))
+            self.assertEqual((budget.calls, round(budget.cost_usd, 2)), (1, 0.04))
+            with self.assertRaises(BudgetExceeded):
+                _run(fn("S", "U"))
+            self.assertEqual(budget.calls, 1)  # the blocked call was never made
+
+
+class TestClaudeVerdictFnOptions(unittest.TestCase):
+    """The Agent SDK ships Claude Code's tool definitions with every call unless told not to:
+    measured 33,542 input tokens for a ~2,000-token prompt, 3,321 with these options."""
+
+    def test_call_is_text_only_one_turn(self):
+        import sys
+        import types
+
+        seen: dict = {}
+
+        class _Options:
+            def __init__(self, **kw):
+                seen.update(kw)
+
+        async def _query(prompt, options):
+            yield types.SimpleNamespace(text="{}")
+
+        fake = types.SimpleNamespace(query=_query, ClaudeAgentOptions=_Options)
+        with patch.dict(sys.modules, {"claude_agent_sdk": fake}):
+            from exposure_analyzer.agent import build_claude_verdict_fn
+            _run(build_claude_verdict_fn()("SYSTEM", "USER"))
+
+        self.assertEqual(seen["system_prompt"], "SYSTEM")
+        self.assertEqual(seen["tools"], [])
+        self.assertEqual(seen["setting_sources"], [])
+        self.assertEqual(seen["max_turns"], 1)
 
 
 if __name__ == "__main__":

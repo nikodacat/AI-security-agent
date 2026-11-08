@@ -567,3 +567,327 @@ cd eval-lab && docker compose up -d --build && cd ..
 - No deferred blockers for v2 ship.
 
 Ready to merge `v2-dev → main` and tag `v2.0`.
+
+---
+
+## §12 — v3-0: Vulhub generalization + three-way baseline (2026-10-01)
+
+### 12.1 Why run this experiment
+
+v2's accuracy numbers (23/24 real-lab) are measured on three containers
+whose Dockerfiles we authored. Two open questions:
+
+1. Does the pipeline work on a container we *didn't* curate?
+2. What does the scaffolding (`host-scanner` + `cve-matcher` +
+   `exposure-analyzer`) add over "just ask Claude the same question"?
+
+The experiment was framed to answer both together: pick one Vulhub
+scenario, run the full v2 chain on it, then run two Claude-only
+baselines on the same target, and compare.
+
+### 12.2 Target
+
+`vulhub/httpd/CVE-2021-41773` — Apache 2.4.49 built from source into
+`/usr/local/apache2/`, running inside `vulhub/httpd:2.4.49` on
+**Debian 10 buster**, port 8080 exposed. Known-vulnerable: path
+traversal + optional mod_cgi RCE. The container has `dpkg` but **no
+`python3`** — informs the sec-agent-target build decision below.
+
+### 12.3 v3-0 sub-chunk: `sec-agent-target` static binary
+
+Before running the experiment, built a self-contained Linux executable
+that wraps host-scanner's self-scan subset — needed because the Vulhub
+container has no Python runtime.
+
+- **Build infra:** Docker, `python:3.9-slim-buster` (glibc 2.28, covers
+  every Vulhub-era Debian). PyInstaller --onefile with explicit
+  `hiddenimports` for the six self-scan scanners.
+- **manylinux2014 was tried first** (glibc 2.17, ideal compat target)
+  but rejected: its Python is statically linked and PyInstaller refuses
+  to build against it. Lesson for v3-1 musl variant: skip manylinux,
+  pick the oldest glibc base image that ships a shared libpython.
+- **buster's apt repos are EOL** — fix by `sed`-rewriting
+  `/etc/apt/sources.list` to `archive.debian.org` before installing
+  binutils (needed by PyInstaller even with `strip=False`).
+- **Lazy-httpx refactor in `host-scanner/scanners/software.py`** —
+  moved `import httpx` from module top into the `_check_versions`
+  function body. Zero behaviour change, shaves ~5MB off the frozen
+  bundle. (Tests still green.)
+- **Output:** `target-agent/dist/sec-agent-target` — 5.5MB ELF, glibc
+  2.28, dynamically linked, Python 3.9.17 interpreter bundled.
+- **Verified against the Vulhub Apache container:** dropped in via
+  `docker cp`, ran via `docker exec`, produced valid host.json with
+  110 dpkg packages and all six scanner sections populated. No apt
+  install, no bind mount, no sys.path dance required.
+
+Trust-model win: operator hands target one signed artifact rather than
+"install Python and bind-mount our code."
+
+### 12.4 Experiment setup
+
+Three systems, same target, same deliverable schema (verdict + narrative
++ remediation per CVE), same model class (Claude Sonnet 5.5):
+
+| System | Inputs available | Access | Scaffolding |
+|---|---|---|---|
+| **v2** | `host.json` + `network_state.json` | None (pure analysis) | host-scanner → cve-matcher (KEV + version-range) → exposure-analyzer |
+| **Baseline 2** (raw Claude) | same `host.json` + `network_state.json` | None | None — one `claude -p` call with the inputs inlined |
+| **Baseline 1** (pure Claude) | just the container name | `docker exec` shell + HTTP | None — general-purpose Agent with 30-command budget |
+
+### 12.5 Results (verdicts side-by-side)
+
+| CVE | v2 | Baseline 2 | Baseline 1 |
+|---|---|---|---|
+| **CVE-2021-41773** (Apache 2.4.49 path traversal) | **MISS** — matcher produced no candidate; dpkg does not see from-source Apache | CONFIRMED from banner, flagged dpkg/from-source caveat | **CONFIRMED + empirically exploited** (curl `/icons/..%2f..%2f..%2fetc/passwd` returned `/etc/passwd`; cgi-bin RCE returned `uid=1(daemon)`) |
+| **CVE-2021-42013** (Apache 2.4.49/50 chain, bonus KEV entry) | MISS — same gate | CONFIRMED from banner | not surfaced |
+| **CVE-2014-6278** (Shellshock on bash 5.0-4) | **MITIGATED_BY_CONFIG** — correctly rejected the fuzzy KEV FP, cited "bash 5.0 is post-fix for Shellshock lineage" | not surfaced | not surfaced (never scanned dpkg) |
+
+### 12.6 Cost / wall-time
+
+| System | Tool calls / turns | Wall time | Approximate cost |
+|---|---|---|---|
+| v2 (analyzer only, no narratives/remediations since no CONFIRMED) | 1 call | ~5 s | ~$0.02 |
+| Baseline 2 (`claude -p`) | 10 turns | 151 s | **$1.00** (109k cache-create + 433k cache-read + 14k output) |
+| Baseline 1 (general-purpose Agent) | 9 tool uses | 63 s | ~$0.20 (67k tokens) |
+
+Baseline 2 is ~50× v2's cost on this scenario, driven by cache-reads of
+the full 38 KB prompt across 10 turns.
+
+### 12.7 Where v2's scaffolding helps
+
+1. **FP rejection with grounded reasoning.** cve-matcher produced a
+   fuzzy KEV hit of score 98 (bash → Shellshock). The analyzer applied
+   the library-CVE version-fix rule (v2-5b prompt) and emitted
+   `MITIGATED_BY_CONFIG` with `evidence.fix_boundary` naming the exact
+   bash patch level. Baseline 1 skipped dpkg entirely and never faced
+   this test; Baseline 2 also missed it in the inputs.
+2. **Schema fidelity.** v2 produced JSON per the published schema. The
+   downstream HTML report, attack-simulator, fix-publisher all consume
+   that schema unchanged. Baseline 1 produced schema-conformant JSON.
+   Baseline 2 **failed schema** — it treated the prompt as a Claude
+   Code task, hit a non-interactive permission barrier, and returned
+   prose instead.
+3. **Remediation safety.** Not exercised here (zero CONFIRMED verdicts
+   meant fix-publisher never ran). The six hard constraints
+   (apt-only, pinned version, no chaining, no shell substitution, no
+   pipes/redirects, no sudo) + the `_FORBIDDEN_METACHARS` validator
+   added in v2-14 remain untested on this scenario — Baseline 1's
+   remediation (`apt install apache2=2.4.51-1~deb11u1`) was
+   wrong-distro and would have been accepted by v2's constraints
+   because the constraints are structural, not semantic.
+
+### 12.8 Where v2's scaffolding hurts
+
+1. **Matcher gate causes from-source blindness.** The exposure-analyzer
+   had the Apache 2.4.49 banner in its `network_state.json` input and
+   even mentioned it inside the Shellshock verdict's reason text — but
+   it cannot *raise* a new CVE candidate, only reason about ones
+   cve-matcher produced. Baseline 1 took two curl probes to catch what
+   v2 architecturally cannot see. This is the single biggest gap this
+   experiment surfaced.
+2. **KEV-only inventory.** Even if cve-matcher had seen Apache in dpkg,
+   it would only have raised the CVE if it were in CISA KEV.
+   CVE-2021-41773 is in KEV; CVE-2021-42013 is in KEV (both lucky);
+   CVE-2017-7529 (nginx) is not and would have been invisible.
+   Non-KEV CVEs are a known blindspot.
+
+### 12.9 Where Baseline 1's lack of scaffolding hurts
+
+1. **Wrong-distro remediation.** Baseline 1 proposed
+   `apt install apache2=2.4.51-1~deb11u1` — a Debian 11 pin for a
+   Debian 10 target. Baseline 2 got the distro right
+   (`apache2=2.4.38-3+deb10u7`, which is a valid Debian 10 security
+   backport that includes the CVE-2021-41773 fix). v2's fix-publisher
+   grounds remediation in `host-scanner`'s OS detection via the prompt
+   — if it had been given a CONFIRMED Apache verdict here, it would
+   have had the correct distro context.
+2. **Running Apache is from-source, not apt.** Both baselines proposed
+   `apt install apache2=...` + `service apache2 restart` as the fix.
+   The *running* Apache is `/usr/local/apache2/bin/httpd`; the apt
+   package `apache2` is not installed. Applying either remediation
+   would leave the vulnerable binary running while starting a
+   different (nonexistent) apt-managed one. v2 would have the same
+   gap today (fix-publisher is also apt-only) — this is a shared
+   failure mode, not a scaffolding win or loss.
+3. **No systematic inventory scan.** Baseline 1 fingerprinted via
+   banner and attacked. It did not look at dpkg, and so it did not
+   face (and could not reject) the Shellshock FP that cve-matcher
+   raised. Over many targets, this becomes a measurable coverage
+   difference, not a one-scenario oddity.
+
+### 12.10 Experimental limitations
+
+1. **One Vulhub scenario, one base-image family.** Generalizability to
+   nginx-from-source, OpenSSL in TLS banners, PHP-FPM, Java-in-Tomcat,
+   etc. is unproven. v3-6 (comparison harness) is scoped to re-run
+   this experiment across a corpus.
+2. **Baseline 2 cwd contamination.** `claude -p` ran with the
+   project tree accessible; the reply references
+   `eval-lab/reports/eval-web-vuln/` by path, suggesting it read v2's
+   pre-existing eval-lab artifacts despite the prompt forbidding
+   `C:\Users\ideal\project\` reads. A clean re-run should chroot the
+   agent into a scratch directory.
+3. **Baseline 1 trail not captured.** The agent returned verdicts
+   inline instead of writing the requested trail file. We know the
+   final answer and the tool-use count but not the per-command
+   rationale. A `--write-trail` wrapper for future runs would fix
+   this.
+4. **No multi-run noise check.** Each baseline was a single sample.
+   v2's v2-5b work documented sampling noise on Sonnet; the
+   baselines were not stability-run.
+5. **No "pure Claude agent with same inputs" cell.** The 2×2 of
+   {inputs: pre-collected vs shell-access} × {scaffolding: on vs off}
+   has one corner missing. v3-6 should fill it.
+
+### 12.11 Thesis-defense framing
+
+The three-way shows v2 and an unrestricted agent are **complementary**,
+not substitutes:
+
+- **v2** is the *safe second-pair-of-eyes*: schema-constrained,
+  grounded in collected evidence, deterministic enough to audit,
+  idempotent re-runs. Good at REFUSING a false candidate with a cited
+  reason.
+- **An unrestricted agent** is the *fast first-pass pentester*:
+  banner → known-exploit, two commands to confirm. Good at CATCHING
+  a reachable known-exploit when it's in training knowledge.
+
+Different coverage patterns and different failure modes. The thesis
+positioning is "principled analysis layer on top of (optional) agentic
+exploration," not "replacement for an agent." That framing survives
+the committee's "why not just use an agent?" question.
+
+### 12.12 Improvement roadmap (v3 chunk seeds)
+
+Ordered by expected ROI for the thesis demo:
+
+- **v3-1: Banner-sourced candidates → analyzer.** Let the analyzer
+  consume `network_state.json` service_guess records as *candidate
+  sources*, not just evidence. One prompt change + one adapter in
+  `exposure-analyzer/exposure_analyzer/candidates.py`. Would close
+  the from-source gap. Does not require rebuilding cve-matcher.
+- **v3-2: NVD CPE engine on cve-matcher.** Second inventory source
+  alongside KEV. Closes the "non-KEV CVE blindspot" so a Vulhub
+  scenario like nginx CVE-2017-7529 (non-KEV) would also surface.
+  Larger lift — needs CPE normalization, caching, rate-limit
+  handling.
+- **v3-3: Agentic verification layer (opt-in).** After a `CONFIRMED`
+  verdict, run a bounded agent (budget ≤5 shell commands, structured
+  argv HITL gate) that empirically probes the target to confirm or
+  demote. Baseline 1 showed this is cheap and informative. Keeps
+  v2's safety layer in front.
+- **v3-4: musl variant of sec-agent-target.** Second build target
+  for Alpine / scratch-based containers. Not glibc-compatible, so
+  needs its own build. ~1 hour.
+- **v3-5: `fix-publisher` from-source awareness.** When
+  `host-scanner` detects running binaries outside `dpkg -S` ownership,
+  suppress apt-only remediation and emit a flagged advisory
+  ("binary at /usr/local/..., not apt-managed; manual patch
+  required").
+- **v3-6: Three-way comparison harness.** Reusable `scripts/compare.py`
+  that runs v2 + both baselines across a Vulhub (and VulnLab,
+  OWASP-WrongSecrets, HackTheBox-Starting-Point) corpus and emits
+  a per-scenario diff. Produces the next tranche of numbers for
+  the thesis.
+
+### 12.13 Reproducibility
+
+Full artifacts: `scratchpad/vulhub-httpd-cve-2021-41773/` (gitignored
+by default — these are per-run outputs, not canonical fixtures). Key
+files:
+
+- `host.json` — produced by `target-agent/dist/sec-agent-target`
+- `network_state.json` — hand-crafted from the observed Apache banner
+  (nmap unavailable on this Windows host; v3-6 harness should bundle
+  nmap in the eval-attacker container)
+- `candidates.json`, `host-state.json` — produced by
+  `scratchpad/run_vulhub_chain.py` (one-off orchestrator; promote
+  to `eval-lab/run_vulhub_scan.py` as part of v3-6)
+- `verdicts.json` — v2's output
+- `baseline1_pure_claude_verdicts.json` — Baseline 1's output
+- `baseline2_raw_response.json` + `baseline2_raw_text.md` —
+  Baseline 2's output
+- `COMPARISON_notes.md` — field notes written during the run (seed
+  for this §12)
+
+### 12.14 Tier A follow-up: multi-run stability + second scenario (2026-10-01)
+
+The §12.1-§12.13 result was n=1 scenario, n=1 run per system — enough
+to seed v3 but not to make a defensible claim. Tier A ran 3× multi-run
+of all three systems on the §12.2 Vulhub Apache target plus a single
+run on a second scenario (eval-cms-plugin) where v2 was expected to
+have an inventory-breadth advantage.
+
+#### 12.14.1 Setup additions over §12
+
+- Baseline-2 now runs from an **empty temp dir** (`scratchpad/tier_a_multirun/clean_cwd/b2_run{1,2,3}/`), not the project root — closes the contamination documented in §12.10.
+- Baseline-1 prompt rewritten to require an **inline `trail` array** in the response JSON — the §12 run returned verdicts but skipped the separate trail-write; the inline format is unmissable. Trails captured for all four reruns.
+- v2 analyzer rerun 3× with identical inputs — measures Sonnet's within-system verdict stability under same-prompt same-candidate.
+- Second scenario: `eval-cms-plugin` (from the project's own eval-lab) — apt-visible libssl1.1 1.1.1d-0+deb10u6 (pre-fix) + apache2 2.4.38-3+deb10u4. v2 produced CONFIRMED verdicts on both OpenSSL CVEs in v2-13; the question is whether the baselines surface the same.
+
+#### 12.14.2 Multi-run stability — Vulhub Apache
+
+| System | Verdict determinism (3 reruns) | Output-schema compliance | Remediation version correctness | Avg cost / run | Avg wall / run |
+|---|:-:|:-:|:-:|:-:|:-:|
+| v2 analyzer | 3/3 identical (`MITIGATED_BY_CONFIG` for Shellshock bash FP) | 3/3 strict JSON | n/a (no CONFIRMED to remediate) | $0.02 | 5s |
+| Baseline-1 (shell agent) | 3/3 identical ({41773, 42013} both CONFIRMED each run) | 3/3 strict JSON incl. inline trail | 3/3 correct Debian 10 pin (`-deb10u7` × 2, `-deb10u8` × 1 — both valid security backports) | $0.19 | 72s |
+| Baseline-2 (one-shot) | **2/3 — one verdict flipped** (CONFIRMED×2 vs MITIGATED_BY_EXPOSURE×1) | **0/3 strict JSON — all have prose wrappers** | 1/3 correct, 1/3 **hallucinated** (`2.4.62-1~deb10u1` never existed), 1/3 upstream-untagged (`2.4.51-1`) | $0.76 | 149s |
+
+The §12 single-run Baseline-1 result (wrong-distro `-deb11u1`, missed CVE-2021-42013) was an outlier. 3/3 reruns got the distro right AND surfaced both CVEs — the §12 anecdote understated Baseline-1's recall and overstated its remediation error rate.
+
+Baseline-2 is the opposite — the §12 run was the *best* Baseline-2 produced. Clean-cwd reruns revealed both the verdict instability and three distinct remediation hallucination/formatting failure modes across three identical-input calls.
+
+**The scaffolding's determinism advantage is now empirical, not inferred.** v2 produces the same structured verdict across runs with ~5-second analyses; Baseline-2 produces different verdicts across identical-input calls while costing ~38× more per call.
+
+#### 12.14.3 Scenario-two coverage divergence — eval-cms-plugin
+
+eval-cms-plugin is a Debian 10 container with WordPress + Apache 2.4.38 (apt-installed) + libssl1.1 1.1.1d-0+deb10u6 (apt-installed, pre-fix for CVE-2022-0778 and CVE-2021-3711). v2's v2-13 run produced 9 verdicts including 2 CONFIRMED (both OpenSSL CVEs) with version-grounded reasoning.
+
+| System | CVEs surfaced | CONFIRMED | What drove the pick |
+|---|---|:-:|---|
+| v2 | CVE-2014-0160, CVE-2014-6278, CVE-2017-8291, CVE-2021-40438, CVE-2021-42013, **CVE-2022-0778**, **CVE-2021-3711**, CVE-2021-44228, CVE-2023-38408 (9) | 2 (OpenSSL) | cve-matcher fuzzy-matched KEV catalog entries against dpkg inventory; analyzer verdicted each |
+| Baseline-1 (shell) | **CVE-2022-22720** (CONFIRMED Apache request smuggling), CVE-2022-22721, CVE-2022-26377, CVE-2023-25690, CVE-2024-38475 (5) | 1 (Apache smuggling) | Agent enumerated apache config + loaded modules; CVE picks came from training knowledge of Apache advisories, 32-bit vs 64-bit arch check, mod_proxy_ajp enablement check, RewriteRule presence check |
+| Baseline-2 (one-shot) | CVE-2017-9798, CVE-2019-0211, CVE-2021-40438 (3) | 0 | Pattern-matched host.json inventory against training-known CVEs |
+
+**Zero CVE overlap between v2 and Baseline-1.** One CVE overlap between v2 and Baseline-2 (CVE-2021-40438). Baseline-1 and Baseline-2 overlap zero.
+
+This is the paper's load-bearing graphic: three AI-pentest setups on the same target produce three essentially disjoint vulnerability sets. "Which LLM / which scaffolding" dominates "what CVEs you find" — far more than within-system noise. The v2 vs no-v2 question is not "does scaffolding squeeze a few more percent of recall?" but "**scaffolding changes what the system can see at all.**"
+
+Specifically:
+- v2's **OpenSSL finds** (CVE-2022-0778, CVE-2021-3711) are reachable only through a dpkg-aware inventory-first pass; Baseline-1 ran `dpkg -l | grep -E 'apache2|php|openssl|...'` in trail step 5 but **chose not to raise OpenSSL CVEs** — not out of lack of information, out of lack of KEV-triggered pattern.
+- Baseline-1's **Apache request-smuggling finds** are reachable only through a module-and-arch-aware runtime inspection; v2's cve-matcher doesn't surface those CVEs because they're not KEV-listed.
+- Baseline-2's picks look driven by banner + inventory recognition without any active probing; it misses what either scaffold-driven dpkg matching OR shell-driven module inspection catches.
+
+#### 12.14.4 Observations across both scenarios
+
+1. **Determinism is where v2 wins hardest.** v2's 3-run verdict agreement is 100% on Vulhub Apache (prose varies, decision doesn't). Baseline-2's is 67% with one verdict flip; Baseline-1's is 100% on verdicts but with lexical variation in remediation version pins (deb10u7 vs deb10u8). For a committee asking "would two runs of your tool give me the same answer?", v2's answer is cleanly yes.
+
+2. **Output-schema compliance is the second-widest gap.** 0/3 of Baseline-2's calls returned strict JSON; every reply had prose preamble about file-write permissions or epistemic hedging. 3/3 of v2's and Baseline-1's did. For a pipeline consumer that needs parseable JSON (reports, downstream tools), the one-shot route is unreliable even on an identical prompt.
+
+3. **Coverage divergence between systems is far larger than divergence within a system.** The §12.14.3 table has zero CVE overlap between v2 and Baseline-1. Two "ask Claude to find CVEs" setups on the same target produce completely different vulnerability lists. **This argues strongly against the "just use an agent" position** — not because an agent is bad, but because *which* agent configuration dominates the result and no single agent configuration gives full coverage.
+
+4. **Scaffolding changes failure modes, not just success modes.** v2 misses CVE-2021-41773 (from-source blind, §12.5). Baseline-1 misses CVE-2022-0778 (dpkg-known pre-fix libssl1.1, caught by v2). Baseline-2 misses CVE-2022-0778 AND CVE-2022-22720. Each system has its own blind spots; v3 architecture should seek to *compose* the strengths (dpkg-aware inventory + banner-aware candidate raising + opt-in agentic verification), not pick one.
+
+5. **Remediation safety is a real finding, not a hypothetical.** Across 7 baseline runs:
+   - 2 contained hallucinated version pins that would fail on `apt install` (never-existed `2.4.62-1~deb10u1`, wrong-distro `2.4.51-1~deb11u1`)
+   - 7/7 contained `&&` chain operators that v2's `fix-publisher` validator rejects structurally
+   - 1 contained no distro-specific version string at all (upstream `2.4.51-1`)
+   An operator pasting any of these into a Debian 10 shell would either get apt-not-found-package errors or install the wrong binary.
+
+#### 12.14.5 Updated improvement roadmap (refines §12.12)
+
+With the Tier A data in hand, the v3 ordering tightens:
+
+- **v3-1 Banner-sourced candidates → analyzer** stays top priority. Closes the §12.5 gap with a surgical change. New success gate: v2 catches CVE-2021-41773 in 3/3 reruns.
+- **v3-3 Agentic verification layer** moves ahead of v3-2 in priority. §12.14.3 shows the shell-driven coverage is complementary to dpkg-driven coverage — not duplicative. Opt-in agentic verify on `CONFIRMED` verdicts turns v2 into a superset. New success gate: on eval-cms-plugin, v3-v2+verify catches both v2's OpenSSL CVEs AND Baseline-1's CVE-2022-22720.
+- **v3-6 comparison harness** stays priority 3, but now with real multi-run and multi-scenario data patterns to automate.
+- **v3-2 NVD CPE engine** demoted — the KEV blindspot matters, but §12.14.3 shows a bigger gap closes via v3-1 + v3-3.
+
+#### 12.14.6 Known Tier-A limitations
+
+1. **Only 2 scenarios.** Vulhub Apache + eval-cms-plugin. Need v3-6 harness for the ~10-scenario corpus a defendable paper requires.
+2. **Baseline-2's prose-wrapper problem may be a `claude -p` artifact, not a Sonnet artifact.** The CLI treats the input as a Claude Code task and burns turns on permission errors. A direct Anthropic API call with the same prompt might behave differently. Worth a one-time apples-to-apples check.
+3. **Baseline-1's "did it probe for OpenSSL" negative is one data point.** Three reruns of Baseline-1 on cms-plugin would clarify whether that's deterministic. Deferred to Tier B.
+4. **No negative-control (clean container) run yet.** Scheduled for Tier B.
+5. **Multi-run cost: ~$6 total.** Comparable scale to a single v2-13 full eval. Full Tier B at the planned ~10-scenario corpus is ~$30-50; still cheap vs the thesis-defense value, but worth a budget line.
+

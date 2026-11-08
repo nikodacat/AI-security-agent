@@ -130,7 +130,7 @@ container). Lua scripting (`EVAL`) confirmed working. Published on host at
 
 | # | CVE            | Software (version)      | Detectable via                                        | Expected verdict         | Rationale |
 |---|----------------|-------------------------|-------------------------------------------------------|--------------------------|-----------|
-| 1 | CVE-2022-0543  | Redis Lua sandbox escape (6.2.6, Debian package) | banner: `INFO server` OR probe: `EVAL "return 1+1" 0` | **CONFIRMED**            | Debian-packaged Lua interpreter linked dynamically; `EVAL` accessible without auth; verified `EVAL` returns `2`. Fixed only in Debian's patched redis (`5:6.0.16-1+deb11u1`), and this container uses the upstream `redis:6.2.6` image which does *not* carry the patch. |
+| 1 | CVE-2022-0543  | Redis Lua sandbox escape (6.2.6, Debian package) | banner: `INFO server` OR probe: `EVAL "return 1+1" 0` | **MITIGATED_BY_CONFIG**  | **Revised 2026-10-30 (was CONFIRMED).** The bug is Debian-specific: Debian links Lua dynamically and leaves the `package` global exposed. This container is the upstream `redis:6.2.6` image: Lua is bundled, and `EVAL "return type(package)" 0` fails with `nonexistent global variable 'package'`. `EVAL` being reachable without auth is true but is not this CVE. The original row mistook "no Debian patch" for "vulnerable". |
 | 2 | (exposure)     | Redis 6.2.6 (any CVE)   | scanner: `bind` + `requirepass` + `protected-mode`    | **CONFIRMED** (as blast-radius marker) | Not a CVE per se — the exposure of an unauthenticated Redis on `0.0.0.0` is itself the finding. Any Redis CVE requiring network access is trivially reachable. |
 | 3 | CVE-2022-0778  | OpenSSL library (libssl1.1 1.1.1n-0+deb11u1)         | dpkg: `libssl1.1`                                     | **MITIGATED_BY_CONFIG**  | Package is at 1.1.1n (patched line). |
 | 4 | CVE-2022-24735 | Redis Lua sandbox escape (redis <=6.2.6)             | banner: `INFO server`                                 | **CONFIRMED**            | Redis 6.2.6 predates 6.2.7 fix; Lua accessible; same conditions as #1. |
@@ -179,8 +179,8 @@ scored). Breakdown by expected verdict:
 
 | Verdict                  | Count |
 |--------------------------|------:|
-| CONFIRMED                | 7     |
-| MITIGATED_BY_CONFIG      | 13    |
+| CONFIRMED                | 6     |
+| MITIGATED_BY_CONFIG      | 14    |
 | MITIGATED_BY_EXPOSURE    | 0     |
 | NOT_RUNNING              | 1     |
 | NO_EVIDENCE              | 3     |
@@ -218,6 +218,22 @@ To exercise this ground truth end-to-end, chunk E needs at minimum:
   they are excluded from the scored YAML.
 
 ## Revision log
+
+- **2026-10-30: CVE-2022-0543 on `eval-db-exposed` changed CONFIRMED -> MITIGATED_BY_CONFIG.**
+  Found while re-checking why the week-9-vs-current comparison never surfaced
+  this CVE. Measured on the running container: `redis-cli EVAL "return
+  type(package)" 0` -> error `nonexistent global variable 'package'`;
+  `ldd redis-server` shows no liblua. The CVE exists only in Debian's
+  packaging (dynamically linked Lua), so the upstream image is not exploitable.
+  **Consequence for earlier numbers:** the v2-13 result (23/24) counted a
+  CONFIRMED verdict on this CVE as correct; under the corrected key that
+  verdict was a false positive, so v2-13 over-stated accuracy by one entry and
+  the attack narrative / remediation generated for it described an exploit
+  that does not apply here. The week-9-vs-current comparison (7 -> 11 of 24)
+  is unaffected in direction: that CVE was never surfaced by either version,
+  so it was wrong before and is still wrong. Revised after seeing results, so
+  it is disclosed here rather than folded in silently. Counts: CONFIRMED 7 -> 6,
+  MITIGATED_BY_CONFIG 13 -> 14.
 
 - **2026-09-21: v2-6 widening (all 24 entries scored).** `ground_truth.yaml`
   bumped to version 3 with `scoring_scope: v2-with-external-prober`. The 17

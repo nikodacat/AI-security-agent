@@ -1,0 +1,34 @@
+# Post-hoc adjudication of CONFIRMED verdicts on CVEs that are NOT in
+# ground_truth.yaml. Used only to estimate PRECISION of unlisted CONFIRMED.
+#
+# Deliberately a separate file: these CVEs were found by the NVD arm itself,
+# so merging them into ground_truth.yaml would hand that arm free recall
+# (selection bias). Recall is measured against the independent key only.
+#
+# "true" means what the tool claims by CONFIRMED: the installed version is in
+# the affected range AND the vulnerable feature is reachable by an outside
+# attacker under the configuration measured on the running container. It does
+# NOT mean an exploit was run; nothing here was exploited.
+#
+# Anything not listed is unreviewed, not wrong.
+
+version: 1
+adjudicated_at: 2026-10-31
+adjudicated_by: author, with Claude assisting; measured with read-only redis-cli on the live container
+
+containers:
+  eval-db-exposed:
+    # Measured on eval-db-exposed (redis 6.2.6): requirepass empty; ACL
+    # `default on nopass ~* &* +@all`; protected-mode no; bind 0.0.0.0;
+    # EVAL, RESTORE, PFCOUNT available; client-output-buffer-limit normal 0 0 0;
+    # PING + INFO answered to an unauthenticated client from eval-attacker.
+    # Fix versions are from each CVE's NVD text (all above 6.2.6).
+    - {cve_id: CVE-2025-49844, adjudicated: true, note: "Lua GC use-after-free, needs an authenticated user; auth is not required here (nopass). Affects all Lua versions <= 8.2.1."}
+    - {cve_id: CVE-2025-46817, adjudicated: true, note: "Lua integer overflow, authenticated user; nopass. <= 8.2.1."}
+    - {cve_id: CVE-2024-46981, adjudicated: true, note: "Lua GC manipulation, authenticated user; nopass. Fixed 6.2.17."}
+    - {cve_id: CVE-2024-31449, adjudicated: true, note: "Lua bit-library stack overflow, authenticated user; nopass. Fixed 6.2.16."}
+    - {cve_id: CVE-2022-24834, adjudicated: true, note: "Lua cjson heap overflow, authenticated user; nopass. Fixed 6.2.13."}
+    - {cve_id: CVE-2025-32023, adjudicated: true, note: "HyperLogLog OOB write, authenticated user; PFCOUNT available; nopass. Fixed 6.2.19."}
+    - {cve_id: CVE-2026-25243, adjudicated: true, note: "RESTORE validation, needs permission for RESTORE; ACL default user has +@all, RESTORE present. Range taken from NVD (<= 8.6.3); not independently confirmed for 6.2.6 beyond NVD."}
+    - {cve_id: CVE-2025-21605, adjudicated: true, note: "Unbounded client output buffer; measured client-output-buffer-limit normal 0 0 0 (the vulnerable default). Fixed 7.4.3."}
+    - {cve_id: CVE-2025-48367, adjudicated: true, note: "Unauthenticated connection DoS; port reachable without credentials from another container. Fixed 6.2.19."}

@@ -11,10 +11,18 @@ field so the operator sees which one failed.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Protocol
 
+from .debver import compare as compare_versions
 from .remediations import Remediation
+
+# One-shot text completion: no tools, no settings files, one turn. Without this the
+# Agent SDK sends Claude Code's tool definitions with every call (measured: 33,542 input
+# tokens for a ~2,000-token prompt; 3,321 with these options, same reply).
+_TEXT_ONLY = {"tools": [], "setting_sources": [], "max_turns": 1}
+
 
 
 class PublisherFn(Protocol):
@@ -33,6 +41,51 @@ class PublisherFn(Protocol):
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def non_apt_origin(verdict: dict) -> str:
+    """Why this verdict's software is NOT apt-managed, or "" if apt may apply / unknown.
+
+    Decided in Python from the candidate's recorded origin, not by the model: an
+    apt pin for a source-built binary or a library on disk is wrong advice.
+
+    - OSV candidates are libraries found on disk (the source field holds a path).
+    - Otherwise the package's own source decides: anything that is not "dpkg..."
+      (e.g. "unmanaged-binary") was not installed by apt.
+    - Banner-sourced candidates carry "dpkg" when an apt package has the banner's
+      version, otherwise a marker saying it was not found in the apt package list.
+    - Verdicts with no origin recorded are left to the model: we do not know.
+    """
+    candidate_source = str(verdict.get("candidate_source") or "")
+    package_source = str(verdict.get("package_source") or "")
+    if candidate_source == "osv":
+        return f"library found at {package_source or 'an unknown path'}, not a Debian package"
+    if candidate_source == "banner":
+        if package_source.startswith("banner (version not in"):
+            return "its version was seen on the network but no apt package has that version (built from source or bundled)"
+        return ""
+    if package_source and not package_source.lower().startswith("dpkg"):
+        return f"installed as '{package_source}', not through apt"
+    return ""
+
+
+_PIN_RE = re.compile(r"(?<=\S)=(\S+)")
+
+
+def pin_not_newer(apt_command: str, installed_version: str) -> str:
+    """The first pinned version in `apt_command` that is not newer than the
+    installed one ("" if every pin is newer, or either side is unknown).
+
+    An apt pin at or below what is installed is not an upgrade: apt would keep
+    or downgrade the package, and the CVE would stay open.
+    """
+    installed = (installed_version or "").strip()
+    if not installed or not apt_command:
+        return ""
+    for pin in _PIN_RE.findall(apt_command):
+        if compare_versions(pin, installed) <= 0:
+            return pin
+    return ""
 
 
 class FixPublisher:
@@ -65,12 +118,31 @@ class FixPublisher:
                 continue
             cve_id = v.get("cve_id", "CVE-UNKNOWN")
             reason = v.get("reason", "")
+            not_apt = non_apt_origin(v)
             try:
-                data = self._publisher_fn(v)
+                # The hint lets the model write a config mitigation or manual steps;
+                # the override below is what actually guarantees no apt command.
+                data = self._publisher_fn({**v, "not_apt_managed": not_apt} if not_apt else v)
                 apt = str(data.get("apt_command", "")).strip()
                 cfg = str(data.get("config_diff", "")).strip()
                 restart = str(data.get("service_restart", "")).strip()
                 explanation = str(data.get("explanation", "")).strip()
+                if not_apt:
+                    apt = ""
+                    explanation = (
+                        f"[Not apt-managed: {not_apt}. Manual patch required; "
+                        f"no apt command is given.] {explanation}"
+                    ).strip()
+                else:
+                    installed = str(v.get("installed_version") or v.get("package_version") or "")
+                    stale = pin_not_newer(apt, installed)
+                    if stale:
+                        explanation = (
+                            f"[Version check failed: the suggested version {stale} is not newer than the "
+                            f"installed {installed}, so it would not fix this. No apt command "
+                            f"is given; look up the fixed version for your Debian release.] {explanation}"
+                        ).strip()
+                        apt = ""
             except Exception as e:  # pragma: no cover - one-off error path
                 apt = ""
                 cfg = "no config change needed"
@@ -125,6 +197,8 @@ def fake_publisher_fn(verdict: dict) -> dict:
         if package_name
         else "apt install <package>=<pinned-version>"
     )
+    if verdict.get("not_apt_managed"):
+        apt_command = ""
 
     return {
         "apt_command": apt_command,
@@ -168,7 +242,7 @@ def build_claude_publisher_fn(model: str = "sonnet") -> PublisherFn:
     from .prompts import SYSTEM_PROMPT, build_remediation_prompt, parse_remediation
 
     async def _call(user_prompt: str) -> str:
-        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT, model=model)
+        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT, model=model, **_TEXT_ONLY)
         chunks: list[str] = []
         async for msg in query(prompt=user_prompt, options=options):
             text = _extract_text(msg)

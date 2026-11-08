@@ -51,7 +51,8 @@ containers:
     - {cve_id: CVE-2014-0160, expected: MITIGATED_BY_CONFIG, software: openssl,     detection: dpkg,    note: "libssl1.1 1.1.1w-0+deb11u8, Heartbleed fixed in 1.0.1g"}
     - {cve_id: CVE-2014-6278, expected: MITIGATED_BY_CONFIG, software: bash,        detection: dpkg,    note: "bash 5.1-2+b3, Shellshock family fixed in bash 4.3 patchlevels"}
     # v2-6 additions (from aspirational tier; row 2 exposure-marker skipped -- no CVE ID)
-    - {cve_id: CVE-2022-0543,  expected: CONFIRMED,           software: redis,      detection: banner,  note: "redis 6.2.6 upstream image (no Debian patch); Lua EVAL accessible without auth; port 6379 open + banner confirmed by prober"}
+    # Revised 2026-10-30: was CONFIRMED. Measured on the running container: `EVAL "return type(package)" 0` errors with "nonexistent global variable 'package'" and redis-server has no dynamic liblua (Lua is bundled). The CVE needs Debian's dynamically-linked Lua, which leaves `package` exposed; the upstream redis:6.2.6 image does not. See ground_truth.md revision log.
+    - {cve_id: CVE-2022-0543,  expected: MITIGATED_BY_CONFIG, software: redis,      detection: banner,  note: "redis 6.2.6 upstream image: Lua bundled, `package` global absent, so the Debian-specific sandbox escape is not reachable (measured 2026-10-30)"}
     - {cve_id: CVE-2022-0778,  expected: MITIGATED_BY_CONFIG, software: openssl,    detection: dpkg,    note: "libssl1.1 1.1.1n-0+deb11u1 at patched line"}
     - {cve_id: CVE-2022-24735, expected: CONFIRMED,           software: redis,      detection: banner,  note: "redis 6.2.6 predates 6.2.7 fix; Lua sandbox escape reachable"}
     - {cve_id: CVE-2022-24736, expected: CONFIRMED,           software: redis,      detection: banner,  note: "redis 6.2.6 predates 6.2.7 fix; Lua NULL-deref DoS reachable"}

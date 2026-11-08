@@ -83,6 +83,10 @@ __pycache__/
 .eggs/
 dist/
 build/
+
+# target-agent PyInstaller artifacts: binary output + spec work dir
+target-agent/dist/
+target-agent/build/
 .pip-cache/
 pip-wheel-metadata/
 .pytest_cache/
@@ -205,3 +209,6 @@ config.local.yaml
 config.local.yml
 *.local
 local_settings.py
+
+# PyInstaller work dir for target-agent/build-glibc217.sh (dist/ is already ignored)
+target-agent/build-glibc217/

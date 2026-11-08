@@ -111,3 +111,122 @@ class ConvenienceWrapperTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NonAptOriginTests(unittest.TestCase):
+    """v3-5: no apt command for software that apt did not install."""
+
+    def _v(self, **kw):
+        return {**CONFIRMED, **kw}
+
+    def test_dpkg_package_is_apt_managed(self) -> None:
+        from fix_publisher.publisher import non_apt_origin
+        self.assertEqual(non_apt_origin(self._v(package_source="dpkg (via host-scanner)")), "")
+        self.assertEqual(non_apt_origin(self._v(package_source="dpkg")), "")
+
+    def test_unmanaged_binary_is_not_apt(self) -> None:
+        from fix_publisher.publisher import non_apt_origin
+        self.assertIn("unmanaged-binary", non_apt_origin(self._v(package_source="unmanaged-binary")))
+
+    def test_osv_library_is_not_apt(self) -> None:
+        from fix_publisher.publisher import non_apt_origin
+        r = non_apt_origin(self._v(candidate_source="osv", package_source="/app/lib/log4j-core.jar"))
+        self.assertIn("log4j-core.jar", r)
+
+    def test_unknown_origin_is_left_to_the_model(self) -> None:
+        from fix_publisher.publisher import non_apt_origin
+        self.assertEqual(non_apt_origin(self._v()), "")
+        self.assertEqual(non_apt_origin(self._v(candidate_source="banner")), "")
+        self.assertEqual(non_apt_origin(self._v(candidate_source="banner", package_source="dpkg")), "")
+
+    def test_banner_version_no_apt_package_has_is_not_apt(self) -> None:
+        from fix_publisher.publisher import non_apt_origin
+        v = self._v(candidate_source="banner", package_source="banner (version not in the apt package list)")
+        self.assertIn("no apt package has that version", non_apt_origin(v))
+
+    def test_publish_all_forces_empty_apt_and_flags_it(self) -> None:
+        # Even a publisher that wrongly returns an apt command is overridden.
+        def wrong(verdict):
+            return {"apt_command": "apt install httpd=2.4.51", "config_diff": "no config change needed",
+                    "service_restart": "no restart needed", "explanation": "upgrade"}
+        rems = FixPublisher(wrong).publish_all([self._v(package_source="unmanaged-binary")])
+        self.assertEqual(rems[0].apt_command, "")
+        self.assertIn("Not apt-managed", rems[0].explanation)
+        self.assertIn("Manual patch required", rems[0].explanation)
+
+    def test_hint_reaches_the_publisher_and_prompt(self) -> None:
+        from fix_publisher.prompts import build_remediation_prompt
+        seen = {}
+        def spy(verdict):
+            seen.update(verdict)
+            return fake_publisher_fn(verdict)
+        FixPublisher(spy).publish_all([self._v(package_source="unmanaged-binary")])
+        self.assertTrue(seen.get("not_apt_managed"))
+        self.assertIn("NOT APT-MANAGED", build_remediation_prompt(seen))
+
+    def test_apt_managed_verdict_unchanged(self) -> None:
+        rems = FixPublisher(fake_publisher_fn).publish_all([self._v(package_source="dpkg")])
+        self.assertIn("libssl1.1", rems[0].apt_command)
+        self.assertNotIn("Not apt-managed", rems[0].explanation)
+
+
+class PinVersionTests(unittest.TestCase):
+    """An apt pin must be newer than what is installed."""
+
+    def test_debian_version_ordering(self) -> None:
+        from fix_publisher.debver import compare
+        older_than = [
+            ("2.4.38-3+deb10u1", "2.4.38-3+deb10u4"),
+            ("1.1.1d-0+deb10u6", "1.1.1n-0+deb10u3"),
+            ("1.1.1d-0+deb10u7", "1.1.1d-0+deb10u8"),
+            ("6.2.7-1", "5:6.0.16-1+deb11u2"),        # epoch outranks everything
+            ("1.0~rc1-1", "1.0-1"),                    # tilde sorts before the end
+            ("2.4.9-1", "2.4.10-1"),                   # numeric, not text, comparison
+            ("1.0-1", "1.0-1+b1"),
+        ]
+        for a, b in older_than:
+            self.assertEqual(compare(a, b), -1, (a, b))
+            self.assertEqual(compare(b, a), 1, (b, a))
+        self.assertEqual(compare("1:2.0-1", "1:2.0-1"), 0)
+        self.assertEqual(compare("2.0", "0:2.0"), 0)
+
+    def test_pin_not_newer(self) -> None:
+        from fix_publisher.publisher import pin_not_newer
+        self.assertEqual(pin_not_newer("apt install apache2=2.4.38-3+deb10u1", "2.4.38-3+deb10u4"),
+                         "2.4.38-3+deb10u1")
+        self.assertEqual(pin_not_newer("apt install apache2=2.4.38-3+deb10u4", "2.4.38-3+deb10u4"),
+                         "2.4.38-3+deb10u4")          # equal is not an upgrade
+        self.assertEqual(pin_not_newer("apt install libssl1.1=1.1.1n-0+deb10u3", "1.1.1d-0+deb10u6"), "")
+        self.assertEqual(pin_not_newer("apt install a=2 b=1", "1.5"), "1")   # any stale pin counts
+        self.assertEqual(pin_not_newer("apt install a=1", ""), "")           # installed version unknown
+        self.assertEqual(pin_not_newer("", "1.0"), "")
+
+    def test_publish_all_drops_a_pin_that_is_not_newer(self) -> None:
+        def stale(verdict):
+            return {"apt_command": "apt install apache2=2.4.38-3+deb10u1", "config_diff": "no config change needed",
+                    "service_restart": "systemctl restart apache2", "explanation": "fixed per DSA"}
+        v = {**CONFIRMED, "package_source": "dpkg", "package_version": "2.4.38-3+deb10u4"}
+        r = FixPublisher(stale).publish_all([v])[0]
+        self.assertEqual(r.apt_command, "")
+        self.assertIn("Version check failed", r.explanation)
+        self.assertIn("2.4.38-3+deb10u1", r.explanation)
+
+    def test_newer_pin_is_kept(self) -> None:
+        def good(verdict):
+            return {"apt_command": "apt install libssl1.1=1.1.1n-0+deb10u3", "config_diff": "no config change needed",
+                    "service_restart": "no restart needed", "explanation": "ok"}
+        v = {**CONFIRMED, "package_source": "dpkg", "package_version": "1.1.1d-0+deb10u6"}
+        r = FixPublisher(good).publish_all([v])[0]
+        self.assertEqual(r.apt_command, "apt install libssl1.1=1.1.1n-0+deb10u3")
+        self.assertNotIn("Version check failed", r.explanation)
+
+    def test_installed_version_wins_over_the_banner_version(self) -> None:
+        # banner says "2.4.38"; the apt package is 2.4.38-3+deb10u4, and the pin is older than that.
+        def stale(verdict):
+            return {"apt_command": "apt install apache2=2.4.38-3+deb10u1", "config_diff": "no config change needed",
+                    "service_restart": "no restart needed", "explanation": "x"}
+        v = {**CONFIRMED, "package_source": "dpkg", "package_version": "2.4.38",
+             "installed_version": "2.4.38-3+deb10u4"}
+        r = FixPublisher(stale).publish_all([v])[0]
+        self.assertEqual(r.apt_command, "")
+        self.assertIn("installed 2.4.38-3+deb10u4", r.explanation)

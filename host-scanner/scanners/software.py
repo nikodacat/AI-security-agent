@@ -25,8 +25,8 @@ Cross-platform note
 -------------------
 Inventory collection is platform-specific:
   Windows : registry walk under HKLM/HKCU Uninstall keys (PowerShell).
-  Linux   : ``dpkg-query -W`` (Debian/Ubuntu family). RPM-family support is
-            a future task.
+  Linux   : ``dpkg-query -W`` (Debian/Ubuntu) or ``rpm -qa`` (RHEL/CentOS/Fedora), then the
+            unmanaged-software and application-layer passes.
 The KEV / NVD engines are pure Python and work identically on both.
 """
 
@@ -38,8 +38,6 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
-
-import httpx
 
 from .base import BaseScanner, IS_LINUX, IS_WINDOWS
 
@@ -63,6 +61,15 @@ class SoftwareScanner(BaseScanner):
     # ---------------------------------------------------------------
 
     def run(self) -> dict:
+        out = self._run_inner()
+        unmanaged = getattr(self, "unmanaged", None)
+        if unmanaged and unmanaged.get("enabled"):
+            out["unmanaged"] = unmanaged
+        if getattr(self, "libraries", None):
+            out["libraries"] = self.libraries
+        return out
+
+    def _run_inner(self) -> dict:
         engine = (self.scanner_cfg.get("engine") or "kev").lower()
         apps = self._get_installed_apps()
         platform_name = "linux" if IS_LINUX else ("windows" if IS_WINDOWS else "unknown")
@@ -129,16 +136,22 @@ $apps | ConvertTo-Json -Depth 2
             return []
 
     def _get_installed_apps_linux(self) -> list[dict[str, Any]]:
-        """Collect installed packages via dpkg-query (Debian/Ubuntu family).
+        """Collect installed packages via dpkg-query (Debian/Ubuntu), rpm (RHEL/CentOS/Fedora) or apk (Alpine).
 
         Produces the SAME shape as the Windows registry walk so the KEV
         engine and the legacy keyword engine consume one consistent format.
+        A host with neither package manager still gets the unmanaged-software and
+        application-layer passes: what the OS does not list is exactly what they are for.
         """
-        if not self._which("dpkg-query"):
-            return []
-        raw = self._sh(
-            "dpkg-query -W -f='${Package}\\t${Version}\\t${Maintainer}\\n' 2>/dev/null"
-        )
+        if self._which("dpkg-query"):
+            raw = self._sh(
+                "dpkg-query -W -f='${Package}\\t${Version}\\t${Maintainer}\\n' 2>/dev/null"
+            )
+        elif self._which("rpm"):
+            raw = self._sh("rpm -qa --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\t%{VENDOR}\\n' 2>/dev/null")
+        else:
+            # Alpine: read apk's own database, which also works where the apk binary is stripped out.
+            raw = parse_apk_db(self._sh(f"cat {APK_DB} 2>/dev/null"))
         apps: list[dict[str, Any]] = []
         for line in raw.splitlines():
             parts = line.split("\t")
@@ -155,7 +168,41 @@ $apps | ConvertTo-Json -Depth 2
                 "Publisher": maintainer,
                 "InstallDate": "",
             })
+        apps.extend(self._unmanaged_apps())
         apps.sort(key=lambda a: a["DisplayName"].lower())
+        return apps
+
+    def _unmanaged_apps(self) -> list[dict[str, Any]]:
+        """Programs outside the package manager (php built from source, /opt, ...).
+
+        Opt-out via ``scanners.software.include_unmanaged: false``. Failures
+        never break the dpkg inventory; they are recorded in ``self.unmanaged``.
+        """
+        self.unmanaged: dict[str, Any] = {"enabled": False}
+        if not self.scanner_cfg.get("include_unmanaged", True):
+            return []
+        try:
+            from . import unmanaged
+            result = unmanaged.collect(unmanaged.linux_probes())
+        except Exception as error:  # never let discovery break the scan
+            self.unmanaged = {"enabled": True, "error": f"{type(error).__name__}: {error}"}
+            return []
+        self.unmanaged = {
+            "enabled": True,
+            "binaries": result.binaries,
+            "running_unmanaged": result.running_unmanaged,
+            "notes": result.notes,
+        }
+        apps = unmanaged.to_installed_apps(result)
+        if self.scanner_cfg.get("include_ecosystems", True):
+            try:
+                from . import ecosystems
+                eco = ecosystems.collect(ecosystems.linux_fs())
+                apps.extend(eco.apps)
+                self.libraries = eco.libraries
+                self.unmanaged["ecosystems"] = {"counts": eco.counts, "notes": eco.notes}
+            except Exception as error:
+                self.unmanaged["ecosystems"] = {"error": f"{type(error).__name__}: {error}"}
         return apps
 
     # ---------------------------------------------------------------
@@ -191,6 +238,7 @@ $apps | ConvertTo-Json -Depth 2
             if not keyword:
                 continue
             try:
+                import httpx
                 resp = httpx.get(
                     api_url,
                     params={"keywordSearch": keyword, "resultsPerPage": max_per_app},
@@ -249,8 +297,8 @@ $apps | ConvertTo-Json -Depth 2
                 name=name,
                 version=(app.get("DisplayVersion") or "").strip(),
                 vendor=(app.get("Publisher") or "").strip(),
-                product=_strip_version_suffix(name),
-                source="hsai-inventory",
+                product=(app.get("Product") or "").strip() or _strip_version_suffix(name),
+                source=app.get("Source") or "hsai-inventory",
             ))
 
         inventory = Inventory(
@@ -362,6 +410,23 @@ $apps | ConvertTo-Json -Depth 2
 # ---------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------
+
+APK_DB = "/lib/apk/db/installed"
+
+
+def parse_apk_db(text: str) -> str:
+    """apk's installed-package database -> 'name<TAB>version<TAB>maintainer' lines.
+
+    The database is blank-line separated blocks of `X:value` lines: P name, V version
+    (with the -rN release), m maintainer. A block without a name or version is skipped.
+    """
+    rows: list[str] = []
+    for block in re.split(r"\n\s*\n", text or ""):
+        fields = {line[0]: line[2:].strip() for line in block.splitlines() if len(line) > 2 and line[1] == ":"}
+        if fields.get("P") and fields.get("V"):
+            rows.append(f"{fields['P']}\t{fields['V']}\t{fields.get('m', '')}")
+    return "\n".join(rows)
+
 
 _PAREN_RE = re.compile(r"\([^)]*\)")
 _DASH_TAIL_RE = re.compile(r"\s+-\s+.*$")

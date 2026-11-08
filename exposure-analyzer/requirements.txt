@@ -2,4 +2,7 @@
 # Kept minimal on purpose — this module leans on cve-matcher + host-scanner
 # for data collection and on claude-agent-sdk for LLM interaction.
 
-claude-agent-sdk>=0.1.0
+claude-agent-sdk>=0.2.130
+# openai-compatible engine only (local/LAN model backends, e.g. llama-server).
+# Lazily imported in agent.py — not required for the fake/claude engines.
+httpx>=0.27.0

@@ -14,6 +14,12 @@ from typing import Callable, Protocol
 from .narratives import Narrative
 from .prompts import scan_for_tool_invocations
 
+# One-shot text completion: no tools, no settings files, one turn. Without this the
+# Agent SDK sends Claude Code's tool definitions with every call (measured: 33,542 input
+# tokens for a ~2,000-token prompt; 3,321 with these options, same reply).
+_TEXT_ONLY = {"tools": [], "setting_sources": [], "max_turns": 1}
+
+
 
 class NarratorFn(Protocol):
     """Callable protocol for the swappable narrator backend.
@@ -162,7 +168,7 @@ def build_claude_narrator_fn(model: str = "sonnet") -> NarratorFn:
     from .prompts import SYSTEM_PROMPT, build_narrative_prompt
 
     async def _call(user_prompt: str) -> str:
-        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT, model=model)
+        options = ClaudeAgentOptions(system_prompt=SYSTEM_PROMPT, model=model, **_TEXT_ONLY)
         chunks: list[str] = []
         async for msg in query(prompt=user_prompt, options=options):
             text = _extract_text(msg)
