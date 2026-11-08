@@ -197,6 +197,11 @@ class ExposureAgent:
             probe_output=probe_output,
             proposed_probe=proposed_probe,
             probe_proposal_error=probe_proposal_error,
+            package_name=str(candidate.get("package_name") or ""),
+            package_version=str(candidate.get("package_version") or ""),
+            installed_version=str(candidate.get("installed_version") or ""),
+            package_source=str(candidate.get("package_source") or ""),
+            candidate_source=str(candidate.get("source") or ""),
         )
 
     async def analyze_batch(

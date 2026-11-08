@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Security Agent</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --ink: #1f2933; --muted: #52606d; --line: #d9e0e7;
+    --accent: #2c5c96; --on-accent: #ffffff; --warn-bg: #fff4d6; --warn-ink: #7a5200;
+    --bad: #b42318; --good: #1a7f4b; --code: #eef3f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --panel: #1b222b; --ink: #e6ebf0; --muted: #9aa8b5; --line: #2d3742;
+      --accent: #7fb0e8; --on-accent: #10202f; --warn-bg: #3a2f10; --warn-ink: #f0c869;
+      --bad: #ff8a7a; --good: #5fd39a; --code: #232c37;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 "Microsoft JhengHei", system-ui, sans-serif; }
+  header, main { max-width: 900px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 20px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 140px 1fr; gap: 10px 12px; align-items: center; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  label { color: var(--muted); }
+  select, input[type=number] { background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+         border-radius: 6px; padding: 7px 10px; font: inherit; max-width: 100%; }
+  input[type=number] { width: 110px; }
+  .checks label { display: block; color: var(--ink); }
+  .checks small { color: var(--muted); }
+  button { font: inherit; border-radius: 6px; padding: 8px 18px; cursor: pointer; border: 1px solid var(--line);
+           background: var(--panel); color: var(--ink); }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .warn { background: var(--warn-bg); color: var(--warn-ink); border-radius: 6px; padding: 8px 12px; margin-top: 12px; }
+  .msg { margin-top: 10px; color: var(--bad); }
+  .status { font-weight: 600; }
+  .status.done { color: var(--good); } .status.failed { color: var(--bad); }
+  pre { margin: 10px 0 0; padding: 10px 12px; background: var(--code); border-radius: 6px; max-height: 320px;
+        overflow: auto; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.45 Consolas, monospace; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-size: 13px; }
+  .CONFIRMED { color: var(--bad); font-weight: 600; }
+  a { color: var(--accent); }
+  .note { color: var(--muted); font-size: 13px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Security Agent</h1>
+  <p class="sub">Pick a target and press Run. This page only starts the command-line tool and shows its log.</p>
+</header>
+<main>
+  <section class="card" aria-labelledby="run-h">
+    <h2 id="run-h">Run a scan</h2>
+    <div class="grid">
+      <label for="target">Target</label>
+      <select id="target"></select>
+
+      <label for="engine">AI engine</label>
+      <select id="engine">
+        <option value="fake">fake: no AI, quick pipeline check</option>
+        <option value="claude">claude: real AI verdicts</option>
+      </select>
+
+      <label>Options</label>
+      <div class="checks">
+        <label><input type="checkbox" id="v2" checked> Full pipeline <small>(network probe, attack story, fix suggestions, report)</small></label>
+        <label><input type="checkbox" id="banner" checked> Also check software seen on the network <small>(from service banners)</small></label>
+        <label><input type="checkbox" id="osv"> Also check libraries <small>(OSV, more AI calls)</small></label>
+        <label><input type="checkbox" id="nvd"> Also check beyond CISA KEV <small>(NVD, more AI calls)</small></label>
+        <label><input type="checkbox" id="check_versions"> Check versions against NVD <small>(slower)</small></label>
+      </div>
+
+      <label id="limits-l">Limits</label>
+      <div id="limits">
+        Max AI calls <input type="number" id="max_calls" min="0" max="500">
+        &nbsp; Max cost (USD) <input type="number" id="max_cost" min="0" max="50" step="0.5">
+      </div>
+    </div>
+    <div class="warn hidden" id="aiwarn"></div>
+    <div class="actions">
+      <button class="primary" id="go">Run</button>
+      <button id="stop" class="hidden">Stop</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="msg" id="msg" role="alert"></div>
+    <div class="actions hidden" id="after"><a id="open" target="_blank" rel="noopener">Open report</a></div>
+    <pre id="log" class="hidden"></pre>
+  </section>
+
+  <section class="card" aria-labelledby="past-h">
+    <h2 id="past-h">Earlier runs</h2>
+    <div id="past" class="note">Loading…</div>
+  </section>
+  <p class="note">CONFIRMED means the affected version is present and a service that could expose it is reachable. It is not proof of exploitation. Only scan machines you own or are authorized to assess.</p>
+</main>
+<script>
+"use strict";
+const TOKEN = "__TOKEN__";
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+let setup = null, offset = 0, timer = null, currentRun = "";
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "X-Token": TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+function updateForm() {
+  const isLocal = $("target").value === "__local__";
+  const ai = $("engine").value === "claude";
+  for (const id of ["v2", "banner", "osv", "nvd"]) { $(id).closest("label").classList.toggle("hidden", isLocal); }
+  $("limits").classList.toggle("hidden", isLocal || !ai);
+  $("limits-l").classList.toggle("hidden", isLocal || !ai);
+  const w = $("aiwarn");
+  w.classList.toggle("hidden", !ai);
+  w.textContent = isLocal
+    ? "This sends findings to the AI and uses your Claude quota. This option has no call limit setting."
+    : "This sends findings to the AI and uses your Claude quota: up to " + $("max_calls").value + " calls / " + $("max_cost").value + " USD.";
+  $("banner").disabled = !$("v2").checked;
+  if (!$("v2").checked) $("banner").checked = false;
+}
+
+async function loadSetup() {
+  try {
+    setup = await api("/api/setup");
+    const sel = $("target");
+    sel.replaceChildren();
+    for (const c of setup.containers) { const o = el("option", null, "Docker container: " + c); o.value = c; sel.append(o); }
+    if (setup.can_scan_local) { const o = el("option", null, "This computer"); o.value = "__local__"; sel.append(o); }
+    $("max_calls").value = setup.defaults.max_calls;
+    $("max_cost").value = setup.defaults.max_cost_usd;
+    if (!sel.options.length) { $("go").disabled = true; $("msg").textContent = (setup.docker_problem || "No running containers") + ". Start a target, then reload this page."; }
+    updateForm();
+  } catch (e) { $("msg").textContent = "Could not load setup: " + e.message; }
+}
+
+async function go() {
+  $("msg").textContent = "";
+  const body = { target: $("target").value, engine: $("engine").value, v2: $("v2").checked, banner: $("banner").checked,
+                 osv: $("osv").checked, nvd: $("nvd").checked, check_versions: $("check_versions").checked,
+                 max_calls: Number($("max_calls").value), max_cost_usd: Number($("max_cost").value) };
+  try {
+    const r = await api("/api/run", body);
+    currentRun = r.run_id; offset = 0;
+    $("log").textContent = ""; $("log").classList.remove("hidden"); $("after").classList.add("hidden");
+    poll();
+  } catch (e) { $("msg").textContent = e.message; }
+}
+
+async function poll() {
+  clearTimeout(timer);
+  try {
+    const s = await api("/api/job?offset=" + offset);
+    const log = $("log");
+    if (s.log) { const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 20; log.textContent += s.log; offset = s.offset; if (atEnd) log.scrollTop = log.scrollHeight; }
+    const running = s.state === "running";
+    $("go").disabled = running; $("stop").classList.toggle("hidden", !running);
+    const st = $("status");
+    st.className = "status " + s.state;
+    st.textContent = running ? "Running… " + s.seconds + " s" : ({ done: "Finished", failed: "Failed (exit " + s.exit_code + ")", stopped: "Stopped", idle: "" })[s.state];
+    if (running) { timer = setTimeout(poll, 1000); return; }
+    if (s.state === "done" || s.state === "failed") showAfter(s.run_id);
+    loadPast();
+  } catch (e) { $("msg").textContent = e.message; }
+}
+
+async function showAfter(runId) {
+  try {
+    const run = await api("/api/run/" + encodeURIComponent(runId));
+    if (run.has_report) { $("open").href = "/report/" + encodeURIComponent(runId).replace("%2F", "/"); $("after").classList.remove("hidden"); }
+  } catch (e) { /* no results written; the log says why */ }
+}
+
+async function loadPast() {
+  const box = $("past");
+  try {
+    const ids = await api("/api/runs");
+    if (!ids.length) { box.textContent = "Nothing yet."; return; }
+    const table = el("table");
+    const head = el("tr");
+    for (const h of ["Run", "CONFIRMED", "Total", ""]) head.append(el("th", null, h));
+    table.append(head);
+    box.replaceChildren(table);
+    for (const id of ids.slice(0, 15)) {
+      const tr = el("tr"); table.append(tr);
+      tr.append(el("td", null, id));
+      try {
+        const run = await api("/api/run/" + encodeURIComponent(id));
+        tr.append(el("td", "CONFIRMED", String(run.verdicts.filter((v) => v.verdict === "CONFIRMED").length)));
+        tr.append(el("td", null, String(run.verdicts.length)));
+        const td = el("td");
+        if (run.has_report) { const a = el("a", null, "Report"); a.href = "/report/" + id; a.target = "_blank"; a.rel = "noopener"; td.append(a); }
+        tr.append(td);
+      } catch (e) { tr.append(el("td", null, "?"), el("td", null, "?"), el("td")); }
+    }
+  } catch (e) { box.textContent = "Could not load runs: " + e.message; }
+}
+
+for (const id of ["target", "engine", "v2", "max_calls", "max_cost"]) $(id).addEventListener("change", updateForm);
+$("go").onclick = go;
+$("stop").onclick = async () => { try { await api("/api/stop", {}); } catch (e) { $("msg").textContent = e.message; } };
+loadSetup().then(() => { loadPast(); poll(); });
+</script>
+</body>
+</html>

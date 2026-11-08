@@ -219,7 +219,10 @@ def main(argv: list[str] | None = None) -> int:
         known = [f["cve_id"] for f in kev_findings]
         if args.banner_candidates:
             if net_obs:
-                kev_findings += cand_mod.banner_candidates(net_obs, existing_cve_ids=known, log=_say)
+                apt_versions = [p.version for p in inventory.packages
+                                if str(getattr(p, "source", "")).startswith("dpkg") and p.version]
+                kev_findings += cand_mod.banner_candidates(
+                    net_obs, existing_cve_ids=known, log=_say, installed_apt_versions=apt_versions)
             else:
                 print("      warning: --banner-candidates needs a network_state "
                       "(--prober-target); skipped.", file=sys.stderr)

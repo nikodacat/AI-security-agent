@@ -10,7 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from exposure_analyzer.candidates import (
+    BANNER_NOT_IN_INVENTORY,
     _ensure_cve_matcher_importable,
+    apt_has_version,
     banner_candidates,
     banner_services,
     finding_to_candidate,
@@ -169,3 +171,36 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBannerOrigin(unittest.TestCase):
+    """The banner step records whether apt could have installed the software."""
+
+    def test_apt_has_version_matches_at_a_boundary(self):
+        self.assertTrue(apt_has_version("2.4.38", ["2.4.38-3+deb10u10"]))
+        self.assertTrue(apt_has_version("8.4p1", ["1:8.4p1-5+deb11u1"]))   # epoch dropped
+        self.assertTrue(apt_has_version("1.18.0", ["1.18.0"]))
+        self.assertFalse(apt_has_version("2.4.49", ["2.4.38-3+deb10u10"]))
+        self.assertFalse(apt_has_version("2.4.49", ["2.4.499-1"]))          # not a prefix of a longer number
+        self.assertFalse(apt_has_version("2.4.49", ["2.4.49.1-1"]))
+        self.assertFalse(apt_has_version("", ["2.4.49-1"]))
+        self.assertFalse(apt_has_version("2.4.49", []))
+
+    def _run(self, versions):
+        return banner_candidates(_VULHUB_STATE, match_fn=lambda s: [_fake_finding("CVE-1")],
+                                 enrich=False, installed_apt_versions=versions)
+
+    def test_banner_version_found_in_apt_list_is_dpkg(self):
+        self.assertEqual(self._run(["2.4.49-1~deb11u1"])[0]["package_source"], "dpkg")
+
+    def test_the_full_installed_apt_version_is_recorded(self):
+        c = self._run(["2.4.38-3+deb10u4", "2.4.49-3+deb10u4"])[0]
+        self.assertEqual(c["installed_version"], "2.4.49-3+deb10u4")
+        self.assertEqual(c["package_version"], "2.4.49")      # the banner's claim is untouched
+        self.assertNotIn("installed_version", self._run(["1.0"])[0])
+
+    def test_banner_version_not_in_apt_list_is_marked(self):
+        self.assertEqual(self._run(["2.4.38-3+deb10u10"])[0]["package_source"], BANNER_NOT_IN_INVENTORY)
+
+    def test_unknown_inventory_records_nothing(self):
+        self.assertNotIn("package_source", self._run(None)[0])

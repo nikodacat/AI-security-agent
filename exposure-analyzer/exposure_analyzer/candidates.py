@@ -19,6 +19,7 @@ runs unless the caller asks for banner candidates.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -98,12 +99,48 @@ def _port_of(source: str) -> int | None:
         return None
 
 
-def finding_to_candidate(finding: Any, banner: str = "") -> dict[str, Any]:
-    """cve-matcher Finding -> kev_findings-shaped dict, tagged as banner-sourced."""
+BANNER_NOT_IN_INVENTORY = "banner (version not in the apt package list)"
+
+
+def apt_match(banner_version: str, installed_versions: Iterable[str]) -> str:
+    """The installed apt package version whose upstream part equals the banner's, or "".
+
+    Compares after dropping the Debian epoch ("1:8.4p1-5" -> "8.4p1-5") and
+    requires the banner version to end at a boundary, so "2.4.49" matches
+    "2.4.49-1~deb11u1" but not "2.4.499". A version shown on the wire that no
+    apt package carries is, in practice, a build from source or a container's
+    own binary.
+    """
+    bv = str(banner_version).strip()
+    if not bv:
+        return ""
+    for v in installed_versions:
+        s = re.sub(r"^\d+:", "", str(v).strip())
+        if s.startswith(bv) and (len(s) == len(bv) or s[len(bv)] in "-+~_ "):
+            return str(v).strip()
+    return ""
+
+
+def apt_has_version(banner_version: str, installed_versions: Iterable[str]) -> bool:
+    return bool(apt_match(banner_version, installed_versions))
+
+
+def finding_to_candidate(finding: Any, banner: str = "",
+                         package_source: str | None = None,
+                         installed_version: str = "") -> dict[str, Any]:
+    """cve-matcher Finding -> kev_findings-shaped dict, tagged as banner-sourced.
+
+    `package_source` records whether apt installed this software ("dpkg") or not
+    (BANNER_NOT_IN_INVENTORY); left out when the package inventory is unknown.
+    """
     entry = finding.entry
     detail = finding.verdict_detail or ""
     note = "version taken from service banner (not a package inventory)"
+    extra = {"package_source": package_source} if package_source is not None else {}
+    if installed_version:
+        extra["installed_version"] = installed_version  # full apt version, e.g. 2.4.38-3+deb10u4
     return {
+        **extra,
         "cve_id": entry.cve_id,
         "kev_name": entry.name,
         "kev_vendor": entry.vendor,
@@ -134,8 +171,14 @@ def banner_candidates(
     match_fn: Callable[..., list[Any]] | None = None,
     enrich_fn: Callable[[list[Any]], None] | None = None,
     log: Callable[[str], None] | None = None,
+    installed_apt_versions: Iterable[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Build kev_findings-shaped candidates from banner observations.
+
+    `installed_apt_versions`: versions of the host's apt packages. When given,
+    each candidate records whether apt could have installed it (see
+    `apt_has_version`), so fix suggestions can avoid apt commands for software
+    apt does not manage. None = inventory unknown, nothing is recorded.
 
     Candidates whose CVE id is already present (from the package-inventory
     path) are skipped, so a Debian-packaged service seen on both paths is
@@ -162,6 +205,7 @@ def banner_candidates(
             say(f"banner candidates: NVD enrichment failed ({type(e).__name__}: {e}); "
                 "continuing with verdict=unknown")
 
+    versions = None if installed_apt_versions is None else list(installed_apt_versions)
     seen = set(existing_cve_ids)
     out: list[dict[str, Any]] = []
     for f in findings:
@@ -170,7 +214,11 @@ def banner_candidates(
             say(f"banner candidates: skip {cve_id} (already a candidate)")
             continue
         seen.add(cve_id)
-        out.append(finding_to_candidate(f, banner_by_source.get(f.package.source, "")))
+        origin, installed = None, ""
+        if versions is not None:
+            installed = apt_match(f.package.version, versions)
+            origin = "dpkg" if installed else BANNER_NOT_IN_INVENTORY
+        out.append(finding_to_candidate(f, banner_by_source.get(f.package.source, ""), origin, installed))
     return out
 
 

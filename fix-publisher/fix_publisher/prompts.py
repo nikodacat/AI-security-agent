@@ -136,6 +136,14 @@ def build_remediation_prompt(verdict: dict[str, Any]) -> str:
     parts.append(f"  kev_product : {kev_product or '(unknown)'}")
     parts.append(f"  kev_vendor  : {kev_vendor or '(unknown)'}")
     parts.append("")
+    not_apt = verdict.get("not_apt_managed", "")
+    if not_apt:
+        parts.append(
+            f"NOT APT-MANAGED: {not_apt}. Leave apt_command empty. Give a config-based "
+            "mitigation in config_diff if one exists, and in explanation say what the "
+            "operator must do to upgrade this software by hand."
+        )
+        parts.append("")
     parts.append("Analyzer reason:")
     parts.append(reason.strip() or "(no reason recorded)")
     parts.append("")
