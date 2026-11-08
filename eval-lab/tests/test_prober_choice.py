@@ -39,3 +39,24 @@ class ChooseProberTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FindNmapTests(unittest.TestCase):
+    def test_on_path(self) -> None:
+        from unittest import mock
+        import run_full_scan as r
+        with mock.patch.object(r.shutil, "which", return_value="/usr/bin/nmap"):
+            self.assertEqual(r.find_nmap(), "/usr/bin/nmap")
+
+    def test_default_windows_folder_is_checked_when_not_on_path(self) -> None:
+        import tempfile
+        from unittest import mock
+        import run_full_scan as r
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "nmap.exe").write_text("x")
+            with mock.patch.object(r.shutil, "which", return_value=None), \
+                 mock.patch.object(r, "_NMAP_WINDOWS_DIRS", (d,)):
+                self.assertEqual(r.find_nmap(), str(Path(d) / "nmap.exe"))
+            with mock.patch.object(r.shutil, "which", return_value=None), \
+                 mock.patch.object(r, "_NMAP_WINDOWS_DIRS", (d + "-missing",)):
+                self.assertIsNone(r.find_nmap())

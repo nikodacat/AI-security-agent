@@ -109,8 +109,13 @@ def build_command(spec: dict, containers: list[str], *, out_dir: Path,
     return cmd
 
 
+_NMAP_WINDOWS_DIRS = (r"C:\Program Files (x86)\Nmap", r"C:\Program Files\Nmap")
+
+
 def have_nmap() -> bool:
-    return shutil.which("nmap") is not None
+    """nmap on PATH or in its default Windows folder (PATH is not refreshed in programs that were
+    already running when it was installed)."""
+    return shutil.which("nmap") is not None or any((Path(d) / "nmap.exe").is_file() for d in _NMAP_WINDOWS_DIRS)
 
 
 def _server_command(spec: dict, containers: list[str], out_dir: Path, python: str,

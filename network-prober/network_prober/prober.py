@@ -15,7 +15,8 @@ time. That keeps ``pytest`` runs green without a system-wide nmap install
 """
 
 from __future__ import annotations
-
+import ipaddress
+import socket
 from typing import Any
 
 
@@ -30,8 +31,34 @@ class ProberResult(dict):
     """
 
 
-def _build_arguments(top_ports: int, timeout: int, ports: str | None = None) -> str:
+def is_this_machine(target: str) -> bool:
+    """True if `target` is this computer: localhost, a loopback address, or one of its own addresses.
+
+    nmap's default SYN scan cannot target the machine it runs on under Windows (it skips the
+    scan and every port looks closed), so such targets get a connect scan instead.
+    """
+    host = target.strip().lower()
+    if host == "localhost":
+        return True
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        # a name: no DNS lookup here, only this computer's own host name
+        return host in {socket.gethostname().lower()}
+    if literal.is_loopback:
+        return True
+    try:
+        return host in set(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        return False
+
+
+def _build_arguments(top_ports: int, timeout: int, ports: str | None = None,
+                     connect_scan: bool = False) -> str:
     """Compose the ``arguments=`` string handed to python-nmap.
+
+    - ``-sT``           : (only when ``connect_scan``) TCP connect scan, for scanning this
+                          computer itself.
 
     - ``-sV``           : service/version detection (populates product/version)
     - ``-p`` or ``--top-ports N`` : explicit port list wins if provided;
@@ -54,7 +81,8 @@ def _build_arguments(top_ports: int, timeout: int, ports: str | None = None) -> 
         port_arg = f"-p {ports}"
     else:
         port_arg = f"--top-ports {int(top_ports)}"
-    return f"-sV {port_arg} -Pn --host-timeout {int(timeout)}s"
+    scan_type = "-sT " if connect_scan else ""
+    return f"{scan_type}-sV {port_arg} -Pn --host-timeout {int(timeout)}s"
 
 
 def scan_targets(
@@ -86,10 +114,11 @@ def scan_targets(
         # In tests, the fake raises RuntimeError; treat any exception as scan failure.
         scanner_error = Exception
 
-    args = _build_arguments(top_ports=top_ports, timeout=timeout, ports=ports)
     per_target: dict[str, dict] = {}
 
     for target in targets:
+        args = _build_arguments(top_ports=top_ports, timeout=timeout, ports=ports,
+                                connect_scan=is_this_machine(target))
         scanner = scanner_factory()
         try:
             scanner.scan(hosts=target, arguments=args)

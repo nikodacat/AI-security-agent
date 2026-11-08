@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
         network_state_path = out_dir / "network_state.json"
         try:
             where = choose_prober(args.prober, container_mode=bool(args.container),
-                                  have_nmap=shutil.which("nmap") is not None,
+                                  have_nmap=find_nmap() is not None,
                                   docker_up=_eval_attacker_up())
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
@@ -497,6 +497,22 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+_NMAP_WINDOWS_DIRS = (r"C:\Program Files (x86)\Nmap", r"C:\Program Files\Nmap")
+
+
+def find_nmap() -> str | None:
+    """Path to nmap: on PATH, or in its default Windows folder (a program started before nmap was
+    installed does not see the updated PATH)."""
+    found = shutil.which("nmap")
+    if found:
+        return found
+    for d in _NMAP_WINDOWS_DIRS:
+        exe = Path(d) / "nmap.exe"
+        if exe.is_file():
+            return str(exe)
+    return None
+
+
 def choose_prober(requested: str, *, container_mode: bool, have_nmap: bool, docker_up: bool) -> str:
     """Where to run the network check: "local", "docker", or "" if neither is possible.
 
@@ -528,6 +544,9 @@ def _run_network_prober_local(*, target: str, output_path: Path, ports: str) -> 
     """Run network-prober on this computer (nmap + python-nmap installed here)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, PYTHONPATH=str(_NETWORK_PROBER_ROOT), PYTHONIOENCODING="utf-8")
+    nmap = find_nmap()
+    if nmap:  # python-nmap looks nmap up on PATH only
+        env["PATH"] = str(Path(nmap).parent) + os.pathsep + env.get("PATH", "")
     cmd = [sys.executable, "-m", "network_prober", "scan", "--target", target, "--ports", ports,
            "--output", str(output_path), "--schema", str(_NETWORK_SCHEMA_PATH)]
     try:
