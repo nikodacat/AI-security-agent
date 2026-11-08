@@ -93,14 +93,67 @@ python run_full_scan.py --container eval-web-vuln --engine claude --v2 \
 costs one model call, so it is bounded by `--nvd-min-cvss` (default 7.0) and
 `--nvd-max-candidates` (default 40, highest score first).
 
+## Scan an ordinary Linux server
+
+For a real server (not one of the lab containers). Nothing is installed on the
+server and nothing is run on it by the analysis: you take one scan file there,
+and everything else happens on your own computer.
+
+1. **Build the scanner once** (needs Docker; the binary lands in `target-agent/dist/`):
+
+   ```bash
+   ./target-agent/build.sh            # glibc-based Linux (Debian, Ubuntu, ...)
+   ./target-agent/build-glibc217.sh   # very old distributions
+   ./target-agent/build-musl.sh       # Alpine
+   ```
+
+2. **Copy it to the server and run it there.** Running as root usually gives the
+   fullest picture (processes, services, protected configuration).
+
+   ```bash
+   scp target-agent/dist/sec-agent-target you@server:/tmp/
+   ssh you@server '/tmp/sec-agent-target' > host.json
+   ```
+
+3. **Analyze the file on your computer**, either in the browser (`python -m gui`,
+   target "A server: IP + scan file") or from the command line:
+
+   ```bash
+   python eval-lab/run_full_scan.py --scan-json host.json --label 203.0.113.5 \
+       --engine claude --attack-simulator --fix-publisher \
+       --report out/report.html --out-dir out/
+   ```
+
+   Add `--prober-target 203.0.113.5 --banner-candidates` to also check the server
+   from the network (see below).
+
+What to know:
+
+- **The scan file leaves the server.** It lists installed packages, services,
+  users and configuration. With `--engine claude` the findings are sent to the
+  AI; use `--engine fake` to try the pipeline without that.
+- **No probes in this mode.** The analyzer cannot run commands on the server, so
+  it judges from the scan file (and the network check, if you run it). With a
+  lab container it can also run probes inside it, which gives it more to go on.
+- **The network check connects to the server** (nmap). It runs on your own
+  computer, which is the external scanning host, so install
+  [nmap](https://nmap.org) and `pip install python-nmap jsonschema` first. (Without
+  nmap it falls back to the `eval-attacker` lab container if that is running.)
+  Only run it against servers you own or are authorized to assess.
+- **Linux only.** Package matching reads dpkg, so Debian and Ubuntu are the most
+  complete. Evaluation so far is on Vulhub and lab containers; there is no
+  measurement on production servers.
+- To scan the machine you are logged in to, `./scripts/scan-local-host.sh` does the
+  same in one step (see the quickstart above).
+
 ## Run from a browser
 
 ```bash
 python -m gui          # http://127.0.0.1:8791/
 ```
 
-A local page that wraps the commands above: pick a Docker container (or this
-computer, on Linux), choose the AI engine and options, press Run, watch the log,
+A local page that wraps the commands above: pick a Docker container, a server
+(its IP and the scan file from the section above), or this computer (on Linux), choose the AI engine and options, press Run, watch the log,
 and open the report. It adds no scanning logic of its own and listens on
 127.0.0.1 only. Choosing the `claude` engine uses your Claude quota; the page
 shows the call and cost limits before you start.

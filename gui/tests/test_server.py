@@ -234,3 +234,66 @@ class JobsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ServerTargetTests(unittest.TestCase):
+    """A server judged from a host-scan file (no docker container involved)."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.uploads = Path(self._tmp.name) / "_uploads"
+        self.scan_id = server.save_upload(json.dumps({"scanners": {"software": {}}}).encode(), self.uploads)
+
+    def _cmd(self, containers=("eval-attacker",), **spec):
+        base = {"target": server.SERVER, "engine": "fake", "host": "203.0.113.5", "scan_id": self.scan_id}
+        return build_command({**base, **spec}, list(containers), out_dir=OUT, uploads_dir=self.uploads,
+                             platform="linux", python="py")
+
+    def test_scan_file_mode_flags(self) -> None:
+        c = self._cmd()
+        self.assertEqual(c[c.index("--label") + 1], "203.0.113.5")
+        self.assertTrue(c[c.index("--scan-json") + 1].endswith(f"{self.scan_id}.json"))
+        self.assertNotIn("--container", c)
+        self.assertNotIn("--prober-target", c)            # no network check unless asked
+        self.assertIn("--fix-publisher", c)
+
+    def test_network_check_needs_authorization_and_a_place_to_run(self) -> None:
+        with mock.patch.object(server, "have_nmap", return_value=True):
+            with self.assertRaisesRegex(ValueError, "authorized"):
+                self._cmd(probe=True)
+        with mock.patch.object(server, "have_nmap", return_value=False):
+            with self.assertRaisesRegex(ValueError, "nmap"):
+                self._cmd(containers=(), probe=True, authorized=True)
+            self._cmd(containers=("eval-attacker",), probe=True, authorized=True)   # the lab fallback
+        with mock.patch.object(server, "have_nmap", return_value=True):
+            c = self._cmd(containers=(), probe=True, authorized=True, banner=True)
+        self.assertEqual(c[c.index("--prober-target") + 1], "203.0.113.5")
+        self.assertIn("--banner-candidates", c)
+
+    def test_banner_needs_the_network_check(self) -> None:
+        with self.assertRaises(ValueError):
+            self._cmd(banner=True)
+
+    def test_unsafe_host_or_missing_file_is_refused(self) -> None:
+        for bad in ("", "a b", "x;rm -rf /", "-h", "$(id)", "1.2.3.4/24", None, 7, "h" * 300):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                self._cmd(host=bad)
+        for bad in ("", "nope" * 6, "../../etc/passwd", None):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                self._cmd(scan_id=bad)
+
+    def test_ai_limits_apply(self) -> None:
+        c = self._cmd(engine="claude", max_calls=7, max_cost_usd=1)
+        self.assertEqual(c[c.index("--max-calls") + 1], "7")
+
+    def test_upload_accepts_only_a_host_scan(self) -> None:
+        for bad in (b"", b"not json", b"[]", b'{"scanners": 3}', b'{"x": 1}', b"\xff\xfe"):
+            with self.assertRaises(ValueError, msg=bad):
+                server.save_upload(bad, self.uploads)
+        with self.assertRaises(ValueError):
+            server.save_upload(b"{" + b" " * (server.MAX_UPLOAD + 1) + b"}", self.uploads)
+
+    def test_run_folder_is_named_after_the_server(self) -> None:
+        self.assertRegex(run_dir_name(server.SERVER, host="203.0.113.5"), r"^203\.0\.113\.5-\d{8}_\d{6}$")
+        self.assertRegex(run_dir_name(server.SERVER, host="bad host"), r"^server-\d{8}_\d{6}$")

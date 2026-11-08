@@ -51,12 +51,16 @@ import argparse
 import asyncio
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+
+_LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$")  # hostname or IPv4/IPv6; no spaces or shell characters
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
@@ -99,6 +103,18 @@ pre{{background:var(--bg);color:var(--text);border:1px solid var(--border);borde
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    if bool(args.container) == bool(args.scan_json):
+        print("error: give exactly one of --container or --scan-json", file=sys.stderr)
+        return 2
+    if args.scan_json:
+        if not args.label or not _LABEL_RE.match(args.label):
+            print("error: --scan-json needs --label (a hostname or IP: letters, digits, '.', '-', ':')",
+                  file=sys.stderr)
+            return 2
+        if not args.scan_json.is_file():
+            print(f"error: scan file not found: {args.scan_json}", file=sys.stderr)
+            return 2
+    label = args.container or args.label
     from exposure_analyzer import settings as settings_mod
     from exposure_analyzer.ordering import order_for_budget
     try:
@@ -124,13 +140,13 @@ def main(argv: list[str] | None = None) -> int:
     # --v2 shortcut: turn on all three v2 stages + create a report if not given.
     if args.v2:
         if args.prober_target is None:
-            args.prober_target = args.container
+            args.prober_target = label
         args.attack_simulator = True
         args.fix_publisher = True
         if args.report is None:
-            args.report = (args.out_dir or (HERE / "reports" / args.container)) / "report.html"
+            args.report = (args.out_dir or (HERE / "reports" / label)) / "report.html"
 
-    out_dir: Path = args.out_dir or (HERE / "reports" / args.container)
+    out_dir: Path = args.out_dir or (HERE / "reports" / label)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     scan_path = out_dir / "scan.json"
@@ -143,8 +159,19 @@ def main(argv: list[str] | None = None) -> int:
     remediations_json_path: Path | None = None
     remediations_md_path: Path | None = None
 
-    print(f"[1/4] Scanning container {args.container!r} via docker exec ...")
-    scan = _run_container_scan(args.container)
+    if args.scan_json:
+        print(f"[1/4] Reading host scan for {label!r} from {args.scan_json} (nothing is run on the server) ...")
+        try:
+            scan = json.loads(args.scan_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            print(f"error: could not read the scan file: {e}", file=sys.stderr)
+            return 2
+        if not isinstance(scan, dict) or not isinstance(scan.get("scanners"), dict):
+            print("error: that file is not a host scan (no top-level 'scanners' object)", file=sys.stderr)
+            return 2
+    else:
+        print(f"[1/4] Scanning container {args.container!r} via docker exec ...")
+        scan = _run_container_scan(args.container)
     scan_path.write_text(json.dumps(scan, indent=2, default=str), encoding="utf-8")
     apps = scan.get("scanners", {}).get("software", {}).get("installed_apps", [])
     print(f"      {len(apps)} installed packages captured -> {scan_path}")
@@ -154,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     from cve_matcher import matcher as matcher_mod
     from cve_matcher.inventory import Inventory, Package
 
-    inventory = _scan_to_inventory(args.container, scan)
+    inventory = _scan_to_inventory(label, scan, "server" if args.scan_json else "container")
     catalog = kev_mod.load()
     print(f"      KEV catalog: {len(catalog)} entries (v{catalog.catalog_version})")
     result = matcher_mod.match(inventory, catalog)
@@ -171,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     kev_findings = [_finding_to_kev_finding(f) for f in result.findings]
     candidates_payload = {
         "schema_version": 1,
-        "source": f"run_full_scan.py against {args.container}",
+        "source": f"run_full_scan.py against {label}",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "kev_findings": kev_findings,
     }
@@ -181,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"      wrote {len(kev_findings)} KEV finding(s) -> {candidates_path}")
 
-    host_state = _derive_host_state(args.container, scan)
+    host_state = _derive_host_state(label, scan)
     host_state_path.write_text(json.dumps(host_state, indent=2, default=str), encoding="utf-8")
 
     # --------------------------------------------------------------- #
@@ -189,13 +216,23 @@ def main(argv: list[str] | None = None) -> int:
     # --------------------------------------------------------------- #
     if args.prober_target:
         network_state_path = out_dir / "network_state.json"
-        print(f"[v2-4] Running network-prober against {args.prober_target!r} "
-              f"via eval-attacker ...")
-        rc = _run_network_prober(
-            target=args.prober_target,
-            output_path=network_state_path,
-            ports=args.prober_ports,
-        )
+        try:
+            where = choose_prober(args.prober, container_mode=bool(args.container),
+                                  have_nmap=find_nmap() is not None,
+                                  docker_up=_eval_attacker_up())
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        if not where:
+            print("      network check skipped: no nmap on this computer and the eval-attacker container "
+                  "is not running. Install nmap (https://nmap.org) and run again.", file=sys.stderr)
+            rc = 6
+        else:
+            print(f"[v2-4] Running network-prober against {args.prober_target!r} "
+                  f"({'from this computer' if where == 'local' else 'via eval-attacker'}) ...")
+            run_prober = _run_network_prober_local if where == "local" else _run_network_prober
+            rc = run_prober(target=args.prober_target, output_path=network_state_path,
+                            ports=args.prober_ports)
         if rc != 0:
             print(f"      network-prober failed (rc={rc}); "
                   f"analyzer will run without --network-state.", file=sys.stderr)
@@ -275,9 +312,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.engine == "claude":
         budget = CallBudget(max_calls=cfg.max_calls or None, max_cost_usd=cfg.max_cost_usd or None)
         verdict_fn = build_claude_verdict_fn(budget)
-        agent_cfg = AgentConfig(run_probes=cfg.run_probes, probe_timeout_sec=cfg.probe_timeout_sec,
+        # From a scan file there is no shell on the target, and the default runner would run
+        # probes on THIS machine, so probes are off in that mode.
+        agent_cfg = AgentConfig(run_probes=cfg.run_probes and not args.scan_json,
+                                probe_timeout_sec=cfg.probe_timeout_sec,
                                 max_output_chars=cfg.max_output_chars)
-        probe_runner = docker_exec_probe_runner(args.container, agent_cfg)
+        probe_runner = None if args.scan_json else docker_exec_probe_runner(args.container, agent_cfg)
         agent = ExposureAgent(verdict_fn=verdict_fn, config=agent_cfg, probe_runner=probe_runner)
         if cfg.prioritize:  # the call cap must not starve the sources built last
             kev_findings = order_for_budget(kev_findings)
@@ -327,7 +367,7 @@ def main(argv: list[str] | None = None) -> int:
                 verdicts_path=verdicts_path,
                 output_path=attack_json_path,
                 markdown_path=attack_md_path,
-                target=args.container,
+                target=label,
                 engine=args.engine,
             )
             if rc != 0:
@@ -348,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
                 verdicts_path=verdicts_path,
                 output_path=remediations_json_path,
                 markdown_path=remediations_md_path,
-                target=args.container,
+                target=label,
                 engine=args.engine,
             )
             if rc != 0:
@@ -364,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[v2-11] Creating minimal report at {report_path} ...")
             report_path.parent.mkdir(parents=True, exist_ok=True)
             report_path.write_text(
-                _MINIMAL_REPORT_TEMPLATE.format(container=args.container),
+                _MINIMAL_REPORT_TEMPLATE.format(container=label),
                 encoding="utf-8",
             )
         print(f"[v2-11] Injecting sections into {report_path} ...")
@@ -389,8 +429,16 @@ def main(argv: list[str] | None = None) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="run_full_scan.py",
                                 description="End-to-end scan+match+analyze for one eval-lab container.")
-    p.add_argument("--container", required=True,
-                   help="Target container name (e.g. eval-web-vuln).")
+    p.add_argument("--container", default=None,
+                   help="Target container name (e.g. eval-web-vuln). Give this OR --scan-json.")
+    p.add_argument("--scan-json", type=Path, default=None,
+                   help="Scan an ordinary server from a host-scan file you already have (the JSON that "
+                        "sec-agent-target, scan_target.py or scripts/scan-local-host.sh writes). Nothing "
+                        "is run on the server, so the analyzer cannot probe it; it judges from the file "
+                        "(and the network probe, if --prober-target is given). Needs --label.")
+    p.add_argument("--label", default=None,
+                   help="With --scan-json: the server's name or IP, used in the report and as the "
+                        "network-probe target.")
     p.add_argument("--engine", choices=("fake", "claude"), default=None,
                    help="Verdict engine. Default: claude (real Agent SDK).")
     p.add_argument("--settings", type=Path, default=None,
@@ -415,6 +463,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--prober-target", default=None,
                    help="Enable network-prober stage. Value is the target hostname to scan from "
                         "the eval-attacker container (usually same as --container).")
+    p.add_argument("--prober", choices=("auto", "local", "docker"), default="auto",
+                   help="Where the network check runs. local = nmap on this computer (the external "
+                        "scanning host). docker = the eval-attacker container (needed for lab containers, "
+                        "whose names only resolve inside the compose network). auto = docker for "
+                        "--container, otherwise local if nmap is installed, else docker if it is up.")
     p.add_argument("--prober-ports", default="22,80,443,3306,6379,8000-8100",
                    help="Comma-separated ports for network-prober -p (default covers the eval-lab set). "
                         "Format matches nmap -p syntax.")
@@ -442,6 +495,69 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="HTML report path. If it exists, sections are injected in-place. "
                         "If missing and --v2 is set, a minimal template is created first.")
     return p
+
+
+_NMAP_WINDOWS_DIRS = (r"C:\Program Files (x86)\Nmap", r"C:\Program Files\Nmap")
+
+
+def find_nmap() -> str | None:
+    """Path to nmap: on PATH, or in its default Windows folder (a program started before nmap was
+    installed does not see the updated PATH)."""
+    found = shutil.which("nmap")
+    if found:
+        return found
+    for d in _NMAP_WINDOWS_DIRS:
+        exe = Path(d) / "nmap.exe"
+        if exe.is_file():
+            return str(exe)
+    return None
+
+
+def choose_prober(requested: str, *, container_mode: bool, have_nmap: bool, docker_up: bool) -> str:
+    """Where to run the network check: "local", "docker", or "" if neither is possible.
+
+    Raises ValueError if the user asked for something that cannot work.
+    """
+    if requested == "local":
+        if not have_nmap:
+            raise ValueError("--prober local needs nmap on this computer (install it from https://nmap.org)")
+        return "local"
+    if requested == "docker":
+        return "docker"
+    if container_mode:
+        return "docker"          # lab container names resolve only inside the compose network
+    if have_nmap:
+        return "local"
+    return "docker" if docker_up else ""
+
+
+def _eval_attacker_up() -> bool:
+    try:
+        p = subprocess.run(["docker", "ps", "--filter", "name=^eval-attacker$", "--format", "{{.Names}}"],
+                           capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return p.returncode == 0 and "eval-attacker" in p.stdout.split()
+
+
+def _run_network_prober_local(*, target: str, output_path: Path, ports: str) -> int:
+    """Run network-prober on this computer (nmap + python-nmap installed here)."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, PYTHONPATH=str(_NETWORK_PROBER_ROOT), PYTHONIOENCODING="utf-8")
+    nmap = find_nmap()
+    if nmap:  # python-nmap looks nmap up on PATH only
+        env["PATH"] = str(Path(nmap).parent) + os.pathsep + env.get("PATH", "")
+    cmd = [sys.executable, "-m", "network_prober", "scan", "--target", target, "--ports", ports,
+           "--output", str(output_path), "--schema", str(_NETWORK_SCHEMA_PATH)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              check=False, env=env, timeout=300)
+    except subprocess.TimeoutExpired:
+        print("      network-prober timed out after 300 s", file=sys.stderr)
+        return 5
+    if proc.returncode != 0:
+        print(f"      network-prober failed:\n{(proc.stderr or '(no stderr)')[:1500]}", file=sys.stderr)
+    return proc.returncode
 
 
 def _run_network_prober(*, target: str, output_path: Path, ports: str) -> int:
@@ -547,7 +663,7 @@ def _run_container_scan(container: str) -> dict[str, Any]:
     return json.loads(proc.stdout)
 
 
-def _scan_to_inventory(container: str, scan: dict[str, Any]):
+def _scan_to_inventory(container: str, scan: dict[str, Any], kind: str = "container"):
     """Adapter: host-scanner scanners.software.installed_apps -> cve-matcher Inventory."""
     from cve_matcher.inventory import Inventory, Package
 
@@ -569,7 +685,7 @@ def _scan_to_inventory(container: str, scan: dict[str, Any]):
     system = scan.get("system", {})
     return Inventory(
         scanned_at=system.get("scan_time", ""),
-        host_os=f"linux (container: {container})",
+        host_os=f"linux ({kind}: {container})",
         host_version=system.get("platform", ""),
         packages=packages,
     )
