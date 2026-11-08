@@ -12,7 +12,7 @@ reach, and returns one of five verdicts with its reasoning. `CONFIRMED` means
 not "proven exploitable". It never exploits anything.
 
 Undergraduate 畢業專題 (Taiwan). Design rationale: `docs/DESIGN.md`. QA record:
-`docs/VERIFICATION.md`. Status and open work: `PROJECT_STATE.md`.
+`docs/VERIFICATION.md`. Roadmap: `docs/ROADMAP.md`.
 
 > **Status: v3 work in progress.** The KEV pipeline, external prober, banner
 > candidates and report stages are tested. NVD discovery (`--nvd-discovery`) is
@@ -54,7 +54,6 @@ Verdicts: `CONFIRMED` / `MITIGATED_BY_CONFIG` / `MITIGATED_BY_EXPOSURE` /
 | `eval-lab/` | Three vulnerable Docker containers, the answer key (`ground_truth.yaml`), and the evaluation harness. |
 | `docs/` | Design, roadmap, verification record, schemas. |
 | `scripts/` | Bootstrap and local-scan helpers. |
-| `紀錄/` | Weekly progress notes (Chinese). |
 
 ## Quickstart: scan this Linux server
 

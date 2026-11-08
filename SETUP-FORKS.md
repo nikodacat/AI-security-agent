@@ -1,7 +1,6 @@
 # Cloning the excluded forks
 
-This repo tracks only `host-scanner/`, `cve-matcher/`, and the
-thesis notes under `紀錄/`. The four forks evaluated during the thesis
+This repo tracks only the project's own packages. The four forks evaluated during the thesis
 are intentionally not tracked here (see `UPSTREAM.md` for why).
 
 If you need any of them locally — e.g. to re-run an evaluation or to

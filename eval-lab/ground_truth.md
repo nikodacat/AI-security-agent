@@ -265,6 +265,5 @@ To exercise this ground truth end-to-end, chunk E needs at minimum:
   `scoring_scope: v1-pipeline-surfaceable`. **Motivation:** the first full
   eval run (2026-08-10) surfaced 0/17 coverage under the original scope,
   which conflated analyzer accuracy with scanner coverage. Splitting the
-  two tiers gives an honest, individually-actionable number for each. See
-  the 2026-08-10 entry in PROJECT_STATE.md decisions log.
+  two tiers gives an honest, individually-actionable number for each. 
 - **2026-08-05: web-vuln row 5 (CVE-2023-38408) — verdict weakened from `NOT_RUNNING` to `NO_EVIDENCE` (pending; see below).** During the first end-to-end chunk-E run against `eval-web-vuln`, Claude correctly pointed out that `ssh -V` returning "not found in PATH" does not conclusively rule out `sshd` being installed at another path. `NOT_RUNNING` requires positive absence proof (`dpkg -l | grep -c openssh-server` returning 0, or `find / -name sshd -type f` returning nothing). Until a stronger absence probe is added, `NO_EVIDENCE` is the honest verdict. Applies to db-exposed row 6 as well. **Fix ownership:** chunk E follow-up probe.

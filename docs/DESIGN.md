@@ -82,7 +82,7 @@ the insider leg of the v2 gray-box workflow.
 
 The §1.3 sketch names the four modules; this section pins down the trust
 topology, data contracts, and module layout that the v2 build (see
-`PROJECT_STATE.md § Roadmap → v2`) will follow. All decisions here came out of
+`docs/ROADMAP.md`) will follow. All decisions here came out of
 the 2026-09-21 design-review + grill-me session and are cross-referenced from the
 decisions log entry of that date.
 
@@ -409,9 +409,9 @@ post-defense any more. The authoritative sources are:
 
 - **Architecture:** §1.4 above (trust topology, data contracts, module layout,
   dynamic probes, attack-sim + fix-publisher fan-out).
-- **Chunk sequence + status:** `PROJECT_STATE.md § Roadmap → v2` (14 chunks
+- **Chunk sequence + status:** `docs/ROADMAP.md` (14 chunks
   `v2-1` through `v2-14`, ordered by dependency + hardest-first risk).
-- **Design decisions:** `PROJECT_STATE.md § Decisions log` entry 2026-09-21.
+- **Design decisions:** the 2026-09-21 design review, summarised in this document.
 
 Items still deferred beyond v2 (kept here so they're not lost):
 

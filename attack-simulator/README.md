@@ -38,5 +38,4 @@ Markdown companion file.
 ## Design references
 
 - `docs/DESIGN.md §1.4.6` — attack-simulator + fix-publisher fan-out
-- `PROJECT_STATE.md` — v2-9 chunk log
 - Deng et al. 2023 (PentestGPT) — prompt-adapter reference (not vendored)

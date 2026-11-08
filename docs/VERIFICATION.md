@@ -130,8 +130,7 @@ against the three library-level contract tests (`test_every_probe_is_safe`,
 
 ## 4. End-to-end verification — the honest story
 
-Six distinct live-Claude runs are documented in the decisions log
-(`PROJECT_STATE.md`). Each is a datapoint proving one specific claim about
+Six distinct live-Claude runs are documented in this repository. Each is a datapoint proving one specific claim about
 the system:
 
 | Run           | What it verified                                    | Outcome |
@@ -253,7 +252,7 @@ scan output from real infrastructure. Safe to include in a public repo.
 
 ## 8. Known limitations (v1 scope + honest positioning)
 
-All of these are already flagged in `PROJECT_STATE.md` decisions log or
+All of these are already flagged in
 `ground_truth.md`, but consolidated here for a single defensible list:
 
 1. **dpkg-only scanner**: source-built software (like the `httpd 2.4.49` we

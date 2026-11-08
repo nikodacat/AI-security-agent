@@ -1,6 +1,6 @@
 # Poster numbers
 
-Status of this file: consolidated 2026-11-03 from README.md (Results), PROJECT_STATE.md (v3-6b to v3-11) and the raw
+Status of this file: consolidated 2026-11-03 from README.md (Results) and the raw
 result files under `eval-lab/`; held-out set 4 and Django/Airflow added 2026-11-05 (v3-13). `results.png` was redrawn 2026-11-05 by
 `make_results.py` (section 3 on the left, section 1 blind sets with Wilson intervals on the right); the numbers are
 typed into that script, so rerun it if section 1 changes. Django/Airflow are not on the chart.
@@ -95,7 +95,7 @@ Model stage on OSV candidates (3 scenarios): expected CVE CONFIRMED in nginx, Ac
 | What the 76 CONFIRMED reasons rest on | 76 cite an open port, 10 a probe, 4 that the code is loaded or used | read from the reasons, not verified against the targets |
 | Same Argon run repeated (r5 vs r3, same model, same 153 calls, no errors) | same verdict 131 of 153 (86%, kappa 0.78); CONFIRMED 79 then 78, in both 72; CONFIRMED-or-not agrees 140 of 153; expected CVEs 3 of 3 CONFIRMED both times | run-to-run noise of one model, not accuracy; the biggest swings are in the two scenarios with no exposed port (jimureport 2 -> 0, minio 2 -> 0) |
 | Does the model's reason state a link between the vulnerable component and the exposed service? (20 of the 76, one reviewer, from the sheet's text only, no lookup) | yes 9, no 10, unsure 1 | single non-specialist reviewer, n=20; this is a reading of the reasons, not a check of the targets: the 'no' rows say 'installed' or 'version in range' plus an open port. Yes rows are the Java/Python packages inside the service's own directory or process (and Jetty, mod_php themselves). Whether the CVE is reachable (column B) is not answered. |
-| Claude re-judging the same 79 CONFIRMED (Argon: 3 expected + 76 sampled) | still CONFIRMED 54 (68%); not 25 (NO_EVIDENCE 14, MITIGATED_BY_CONFIG 9, other 2); expected CVEs 3 of 3 still CONFIRMED | $2.51, 80 calls, 1 run; agreement is not correctness (see PROJECT_STATE v3-12) |
+| Claude re-judging the same 79 CONFIRMED (Argon: 3 expected + 76 sampled) | still CONFIRMED 54 (68%); not 25 (NO_EVIDENCE 14, MITIGATED_BY_CONFIG 9, other 2); expected CVEs 3 of 3 still CONFIRMED | $2.51, 80 calls, 1 run; agreement is not correctness |
 
 CONFIRMED here means "affected version present on a host with a reachable service" (e.g. curl 7.81 on a host whose
 Go service listens on 10086). It is not "exploitable". No human review of the 76 has been done; do not print a precision.

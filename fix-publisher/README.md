@@ -51,4 +51,3 @@ human-readable Markdown companion.
 ## Design references
 
 - `docs/DESIGN.md §1.4.6` — attack-simulator + fix-publisher fan-out
-- `PROJECT_STATE.md` — v2-10 chunk log

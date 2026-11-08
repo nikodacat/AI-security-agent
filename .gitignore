@@ -4,7 +4,6 @@
 # What this repo tracks:
 #   host-scanner/   (this project)
 #   cve-matcher/        (this project)
-#   紀錄/                (thesis notes, kept as-is on the remote)
 #
 # What this repo intentionally does NOT track (see SETUP-FORKS.md
 # for how to clone them locally if needed):

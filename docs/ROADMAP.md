@@ -23,8 +23,7 @@ chunk). Don't just let it go stale.
 
 **Code chunks (A-J + F + P + V): all done and verified.** Remaining work is
 report writing (K/L/M), defense prep (N), and the release tag (O).
-Detailed per-chunk decision rationale + timings in `PROJECT_STATE.md`
-decisions log.
+Per-chunk decision rationale is summarised in `docs/DESIGN.md` and `docs/VERIFICATION.md`.
 
 ```
 [x] A B C D E F G H I J P V        code + eval + verification
@@ -37,8 +36,7 @@ decisions log.
 
 - [x] **A. Rename modules to `host-scanner/` + `cve-matcher/`.**
   Outcome: renames applied; all imports, launchers (`run_cli.*`, `run_web.*`),
-  `.gitignore` paths, README/LINUX.md/UPSTREAM.md/SETUP-FORKS.md, and
-  `scripts/init-repo.ps1` sanity guards updated. Existing scans (host-scanner
+  `.gitignore` paths, README/LINUX.md/UPSTREAM.md/SETUP-FORKS.md updated. Existing scans (host-scanner
   alone; cve-matcher standalone) still run end-to-end. One commit.
   **Done: commit `ff16f9e`.**
 
@@ -59,7 +57,7 @@ decisions log.
   containers (web-vuln, db-exposed, cms-plugin) each with deliberate CVEs.
   `docker exec container-name python -m host_scanner` completes without
   error. Compose file + Dockerfiles committed.
-  **Done: commit `8a65edc`. Build hurdles logged in PROJECT_STATE (buster EOL, pip <23 pyproject issue, redis missing dir).**
+  **Done: commit `8a65edc`. Build hurdles: buster EOL, pip <23 pyproject issue, redis missing dir.**
 
 - [x] **C. Verdict schema + report integration.**
   Depends on: B.
@@ -144,7 +142,7 @@ decisions log.
   host-scanner cwd bug, cve-matcher requirements comment). Test count
   38 → 52; coverage 52 → 87%. Discovered + fixed over-claimed
   `safe=True` invariant (now `frozen=True` dataclass).
-  **Done: commit `c5bc1ce`. Substitutes for the deferred formal dual-engine cross-review — see PROJECT_STATE for the `agy`-tooling issue that blocked the Gemini path.**
+  **Done: commit `c5bc1ce`. Substitutes for the deferred formal dual-engine cross-review (the Gemini path was blocked by a tooling issue).**
 
 ---
 
